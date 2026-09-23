@@ -1,0 +1,195 @@
+---
+# Parameterized Day-1 provisioner for OpenShift Virtualization.
+# Compatible with the rhpds/ocp-virt demo shape (linuxvm ns, RHEL9 DataSource,
+# cloud-init with ssh_public_key + vm_password), but driven by survey / SSAP vars.
+#
+# Wire this playbook in your AAP job template (same project as rhpds/ocp-virt,
+# or point the project SCM at this repo).
+#
+# Required extra_vars (from SSAP or AAP survey):
+#   vm_count, vm_size (small|medium|large), vm_role, vm_env
+#   ssh_public_key, vm_password
+# Optional:
+#   target_namespace (default: linuxvm)
+#   estimated_monthly_cost_xof, currency
+- name: Deploy VMs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_namespace: "{{ target_namespace | default('linuxvm') }}"
+    vm_count: "{{ vm_count | default(1) | int }}"
+    vm_size: "{{ vm_size | default('small') }}"
+    vm_role: "{{ vm_role | default('web') }}"
+    vm_env: "{{ vm_env | default('dev') }}"
+    vm_start_id: "{{ vm_start_id | default(1) | int }}"
+    currency: "{{ currency | default('XOF') }}"
+    # Maps to OpenShift RHEL9 server template sizes used in the demo
+    size_catalog:
+      small:
+        template: rhel9-server-small
+        cores: 1
+        memory: 2Gi
+        storage: 30Gi
+        unit_price_xof: 25000
+      medium:
+        template: rhel9-server-medium
+        cores: 1
+        memory: 4Gi
+        storage: 30Gi
+        unit_price_xof: 45000
+      large:
+        template: rhel9-server-large
+        cores: 2
+        memory: 8Gi
+        storage: 30Gi
+        unit_price_xof: 85000
+
+  tasks:
+    - name: Validate VM size
+      ansible.builtin.assert:
+        that:
+          - vm_size in size_catalog
+        fail_msg: "vm_size must be one of: {{ size_catalog.keys() | list }}"
+
+    - name: Resolve size profile
+      ansible.builtin.set_fact:
+        size_profile: "{{ size_catalog[vm_size] }}"
+
+    - name: Build VM instance list
+      ansible.builtin.set_fact:
+        vm_instances: >-
+          {{
+            vm_instances | default([]) + [{
+              'role': vm_role,
+              'env': vm_env,
+              'id': (vm_start_id | int) + (item | int) - 1,
+              'name': vm_role ~ '-' ~ vm_env ~ '-' ~ ('%02d' | format((vm_start_id | int) + (item | int) - 1))
+            }]
+          }}
+      loop: "{{ range(1, (vm_count | int) + 1) | list }}"
+
+    - name: Show cost estimate
+      ansible.builtin.debug:
+        msg: |
+          Chargeback preview
+          ------------------
+          Namespace: {{ target_namespace }}
+          Count:     {{ vm_count }} × {{ vm_size }}
+          Specs:     {{ size_profile.cores }} vCPU / {{ size_profile.memory }} / {{ size_profile.storage }}
+          Names:     {{ vm_instances | map(attribute='name') | list | join(', ') }}
+          Unit:      {{ size_profile.unit_price_xof }} {{ currency }} / VM / month
+          Estimate:  {{
+            estimated_monthly_cost_xof
+            | default((size_profile.unit_price_xof | int) * (vm_count | int))
+          }} {{ currency }} / month
+
+    - name: Create the target namespace
+      kubernetes.core.k8s:
+        validate_certs: false
+        name: "{{ target_namespace }}"
+        kind: Namespace
+        api_version: v1
+        state: present
+
+    - name: Create VirtualMachine
+      kubernetes.core.k8s:
+        validate_certs: false
+        definition:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ target_namespace }}"
+            labels:
+              app: "{{ item.name }}"
+              kubevirt.io/dynamic-credentials-support: "true"
+              vm.kubevirt.io/template: "{{ size_profile.template }}"
+              vm.kubevirt.io/template.namespace: openshift
+              vm.kubevirt.io/template.revision: "1"
+              vm.kubevirt.io/template.version: v0.26.0
+              chargeback.size: "{{ vm_size }}"
+              chargeback.env: "{{ item.env }}"
+          spec:
+            running: true
+            dataVolumeTemplates:
+              - apiVersion: cdi.kubevirt.io/v1beta1
+                kind: DataVolume
+                metadata:
+                  name: "{{ item.name }}"
+                spec:
+                  sourceRef:
+                    kind: DataSource
+                    name: rhel9
+                    namespace: openshift-virtualization-os-images
+                  storage:
+                    resources:
+                      requests:
+                        storage: "{{ size_profile.storage }}"
+            template:
+              metadata:
+                labels:
+                  kubevirt.io/domain: "{{ item.name }}"
+                  kubevirt.io/size: "{{ vm_size }}"
+              spec:
+                architecture: amd64
+                domain:
+                  cpu:
+                    cores: "{{ size_profile.cores | int }}"
+                    sockets: 1
+                    threads: 1
+                  devices:
+                    disks:
+                      - disk:
+                          bus: virtio
+                        name: rootdisk
+                      - disk:
+                          bus: virtio
+                        name: cloudinitdisk
+                    interfaces:
+                      - macAddress: "02:f3:be:00:00:{{ '%02x' | format(item.id | int) }}"
+                        masquerade: {}
+                        model: virtio
+                        name: default
+                    networkInterfaceMultiqueue: true
+                    rng: {}
+                  features:
+                    acpi: {}
+                    smm:
+                      enabled: true
+                  firmware:
+                    bootloader:
+                      efi: {}
+                  machine:
+                    type: pc-q35-rhel9.2.0
+                  memory:
+                    guest: "{{ size_profile.memory }}"
+                networks:
+                  - name: default
+                    pod: {}
+                terminationGracePeriodSeconds: 180
+                volumes:
+                  - dataVolume:
+                      name: "{{ item.name }}"
+                    name: rootdisk
+                  - cloudInitConfigDrive:
+                      userData: |
+                        #cloud-config
+                        users:
+                          - name: cloud-user
+                            sudo: ['ALL=(ALL) NOPASSWD: ALL']
+                            groups: wheel
+                            shell: /bin/bash
+                            ssh_authorized_keys:
+                              - "{{ ssh_public_key }}"
+                            passwd: "{{ vm_password }}"
+                            lock_passwd: false
+                        chpasswd:
+                          list: |
+                            cloud-user:{{ vm_password }}
+                          expire: False
+                    name: cloudinitdisk
+      loop: "{{ vm_instances }}"
+      loop_control:
+        label: "{{ item.name }}"

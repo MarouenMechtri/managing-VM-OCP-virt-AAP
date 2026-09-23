@@ -1,28 +1,34 @@
 ---
 # Self-Service Automation Portal (SSAP) custom template
-# Import this file (or the Git repo URL) into AAP Self-Service Automation Portal.
+# Import: https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
 #
-# Prerequisites in AAP Controller:
-#   - Job template named exactly: "OpenShift Virt / Deploy VMs"
-#   - Survey / prompt-on-launch aligned with the extraVariables below (optional if only SSAP is used)
+# Aligns with the rhpds/ocp-virt Day-1 demo (RHEL9 on OpenShift Virtualization)
+# but adds count + size survey and a monthly cost preview.
 #
-# Pricing: edit the rates in the size dependencies and in the Nunjucks expressions
-# in the review / launch steps to match your catalog.
+# AAP prerequisites:
+#   1. Job template named exactly: Provision VMs
+#   2. Playbook: playbooks/provision_vms.yml (this repo) OR replace
+#      provision_vms.yml in your rhpds/ocp-virt project with that file
+#   3. Job template extra_vars / survey must supply ssh_public_key and vm_password
+#      (keep secrets in AAP credentials / survey, not in this Git repo)
+#   4. Credential: OpenShift / kubeconfig for your cluster
+#
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
   name: ocp-virt-vm-deploy-custom
   title: Deploy VMs on OpenShift Virtualization
   description: >-
-    Provision one or more virtual machines on OpenShift Virtualization.
-    Choose a size (CPU / memory), set how many VMs you need, and preview
-    the estimated monthly cost before you launch.
+    Provision RHEL 9 VMs on OpenShift Virtualization (linuxvm project).
+    Choose how many VMs and which size (small / medium / large), preview
+    the estimated monthly cost, then launch the AAP Provision VMs job.
   namespace: default
   tags:
     - openshift
     - virtualization
     - provisioning
     - cost
+    - rhel
 spec:
   type: service
   owner: group:default/platform-team
@@ -33,116 +39,94 @@ spec:
       reviewButtonText: 'Review & cost estimate'
 
   parameters:
-    # ------------------------------------------------------------------
-    # Step 1 — what to deploy
-    # ------------------------------------------------------------------
     - title: VM configuration
       required:
-        - vmNamePrefix
+        - vmRole
         - vmCount
         - vmSize
-        - operatingSystem
+        - vmEnv
         - targetNamespace
-        - environment
       properties:
-        vmNamePrefix:
-          title: VM name prefix
+        vmRole:
+          title: VM role / name prefix
           type: string
           description: >-
-            Prefix used for VM names (e.g. web → web-001, web-002).
-            Use lowercase letters, numbers, and hyphens only.
-          pattern: '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$'
+            Used in VM names as {role}-{env}-{id} (demo style), e.g. web-dev-01.
+          pattern: '^[a-z]([a-z0-9-]{0,20}[a-z0-9])?$'
+          default: web
           minLength: 2
-          maxLength: 32
+          maxLength: 22
           errorMessage:
-            pattern: 'Use a valid DNS-safe prefix (lowercase, start with a letter).'
+            pattern: 'Use a DNS-safe lowercase prefix.'
 
         vmCount:
           title: Number of VMs
           type: integer
-          description: How many identical VMs to create (1–20).
+          description: How many identical VMs to create (1–10 for the workshop cluster).
           default: 1
           minimum: 1
-          maximum: 20
+          maximum: 10
           errorMessage:
             minimum: 'At least 1 VM is required.'
-            maximum: 'Maximum is 20 VMs per request.'
+            maximum: 'Maximum is 10 VMs per request.'
 
         vmSize:
           title: VM size
           type: string
           description: >-
-            Size defines vCPU, memory, and system disk. Unit prices are
-            monthly rates per VM (edit in this template to match your catalog).
-          default: medium
+            Matches OpenShift RHEL9 server templates used by the ocp-virt demo.
+          default: small
           enum:
             - small
             - medium
             - large
-            - xlarge
           enumNames:
-            - Small (2 vCPU / 4 GiB)
-            - Medium (4 vCPU / 8 GiB)
-            - Large (8 vCPU / 16 GiB)
-            - X-Large (16 vCPU / 32 GiB)
+            - Small — 1 vCPU / 2 GiB / 30 GiB (rhel9-server-small)
+            - Medium — 1 vCPU / 4 GiB / 30 GiB (rhel9-server-medium)
+            - Large — 2 vCPU / 8 GiB / 30 GiB (rhel9-server-large)
 
-        operatingSystem:
-          title: Guest operating system
+        vmEnv:
+          title: Environment
           type: string
-          description: OS image / template used for the VMs.
-          default: rhel9
+          description: Environment segment in the VM name and chargeback label.
+          default: dev
           enum:
-            - rhel9
-            - rhel8
-            - windows2022
+            - dev
+            - staging
+            - prod
           enumNames:
-            - Red Hat Enterprise Linux 9
-            - Red Hat Enterprise Linux 8
-            - Windows Server 2022
+            - Development
+            - Staging
+            - Production
 
         targetNamespace:
           title: OpenShift project / namespace
           type: string
-          description: Namespace where the VirtualMachine objects will be created.
+          description: Namespace for VirtualMachine objects (demo default is linuxvm).
           pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
-          default: vm-workloads
+          default: linuxvm
           errorMessage:
             pattern: 'Enter a valid OpenShift namespace name.'
 
-        environment:
-          title: Environment
-          type: string
-          description: >-
-            Billing multiplier: Development ×1.0, Staging ×1.1, Production ×1.25.
-          default: development
-          enum:
-            - development
-            - staging
-            - production
-          enumNames:
-            - Development
-            - Staging (+10%)
-            - Production (+25%)
-
-        storageGi:
-          title: Extra data disk (GiB)
+        vmStartId:
+          title: Starting VM id
           type: integer
-          description: Optional additional persistent disk per VM (0 = none). Charged at the data-disk rate.
-          default: 0
-          minimum: 0
-          maximum: 2048
+          description: First numeric suffix (web-dev-01 if start id = 1).
+          default: 1
+          minimum: 1
+          maximum: 99
 
         inventory:
           title: Target inventory
-          description: AAP inventory that contains your OpenShift / kubeconfig hosts.
+          description: AAP inventory that can reach the OpenShift API (often localhost + kube credential).
           resource: inventories
           ui:field: AAPResourcePicker
 
         credentials:
           title: Credentials
           description: >-
-            Credentials used by the job (e.g. OpenShift / kubeconfig or cloud credential).
-            Only one credential per type is allowed.
+            OpenShift / kubeconfig credential for the cluster.
+            SSH public key and VM password should remain on the job template survey.
           type: array
           ui:field: AAPResourcePicker
           resource: credentials
@@ -157,10 +141,9 @@ spec:
                   type: string
                   title: Selected size — Small
                   description: >-
-                    Specs: 2 vCPU · 4 GiB RAM · 40 GiB system disk.
-                    Base rate: 45 000 XOF / VM / month.
-                    Extra data disk: 150 XOF / GiB / month.
-                  default: '2 vCPU | 4 GiB | 40 GiB OS disk | 45 000 XOF/VM/mo'
+                    Specs: 1 vCPU · 2 GiB RAM · 30 GiB disk (rhel9-server-small).
+                    Base rate: 25 000 XOF / VM / month.
+                  default: '1 vCPU | 2 GiB | 30 GiB | 25 000 XOF/VM/mo'
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
@@ -175,10 +158,9 @@ spec:
                   type: string
                   title: Selected size — Medium
                   description: >-
-                    Specs: 4 vCPU · 8 GiB RAM · 80 GiB system disk.
-                    Base rate: 85 000 XOF / VM / month.
-                    Extra data disk: 150 XOF / GiB / month.
-                  default: '4 vCPU | 8 GiB | 80 GiB OS disk | 85 000 XOF/VM/mo'
+                    Specs: 1 vCPU · 4 GiB RAM · 30 GiB disk (rhel9-server-medium).
+                    Base rate: 45 000 XOF / VM / month.
+                  default: '1 vCPU | 4 GiB | 30 GiB | 45 000 XOF/VM/mo'
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
@@ -190,33 +172,14 @@ spec:
                   type: string
                   title: Selected size — Large
                   description: >-
-                    Specs: 8 vCPU · 16 GiB RAM · 160 GiB system disk.
-                    Base rate: 160 000 XOF / VM / month.
-                    Extra data disk: 150 XOF / GiB / month.
-                  default: '8 vCPU | 16 GiB | 160 GiB OS disk | 160 000 XOF/VM/mo'
-                  ui:widget: textarea
-                  ui:readonly: true
-                  ui:options:
-                    rows: 2
-            - properties:
-                vmSize:
-                  const: xlarge
-                sizeSummary:
-                  type: string
-                  title: Selected size — X-Large
-                  description: >-
-                    Specs: 16 vCPU · 32 GiB RAM · 320 GiB system disk.
-                    Base rate: 300 000 XOF / VM / month.
-                    Extra data disk: 150 XOF / GiB / month.
-                  default: '16 vCPU | 32 GiB | 320 GiB OS disk | 300 000 XOF/VM/mo'
+                    Specs: 2 vCPU · 8 GiB RAM · 30 GiB disk (rhel9-server-large).
+                    Base rate: 85 000 XOF / VM / month.
+                  default: '2 vCPU | 8 GiB | 30 GiB | 85 000 XOF/VM/mo'
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
                     rows: 2
 
-    # ------------------------------------------------------------------
-    # Step 2 — accept estimate before launch
-    # ------------------------------------------------------------------
     - title: Cost estimate & confirmation
       required:
         - acceptCostEstimate
@@ -225,14 +188,9 @@ spec:
           type: string
           title: How the estimate is calculated
           description: >-
-            Estimated monthly cost =
-            (base rate for size + extra disk GiB × 150 XOF)
-            × number of VMs
-            × environment multiplier
-            (dev 1.0 / staging 1.1 / production 1.25).
-            Exact total is computed on the next Review screen and in the job output.
-          default: >-
-            small 45 000 | medium 85 000 | large 160 000 | xlarge 300 000 XOF per VM/month
+            Estimated monthly cost = unit rate for size × number of VMs.
+            Rates: small 25 000 · medium 45 000 · large 85 000 XOF per VM/month.
+          default: 'small 25 000 | medium 45 000 | large 85 000 XOF per VM/month'
           ui:widget: textarea
           ui:readonly: true
           ui:options:
@@ -245,8 +203,8 @@ spec:
           title: I understand and accept the estimated monthly charge
           type: boolean
           description: >-
-            Check this box to confirm you have reviewed the size rate and VM count.
-            The final estimate appears on the Review step before Deploy.
+            Confirm you reviewed the size rate and VM count.
+            The computed total appears on Review and in the job output.
           default: false
           const: true
           errorMessage:
@@ -255,126 +213,76 @@ spec:
         businessJustification:
           title: Business justification (optional)
           type: string
-          description: Short note for chargeback / audit (project, ticket, cost center).
+          description: Short note for chargeback / audit.
           ui:options:
             rows: 3
 
-    # ------------------------------------------------------------------
-    # Step 3 — human review copy (values also appear in portal Review UI)
-    # ------------------------------------------------------------------
     - title: Ready to deploy
       properties:
         finalNote:
           type: string
           title: Next step
           description: >-
-            Click Review & cost estimate, verify the calculated monthly total,
-            then click Deploy VMs to start provisioning on OpenShift Virtualization.
-          default: 'Your selections will be sent to Ansible Automation Platform.'
+            Click Review & cost estimate, verify the monthly total, then Deploy VMs.
+            The job uses your AAP kube credential against OpenShift Virtualization.
+          default: 'ssh_public_key and vm_password must already be set on the Provision VMs job template.'
           ui:widget: textarea
+          ui:readonly: true
           ui:options:
             rows: 2
 
   steps:
-    # Computed estimate shown in the activity log before the job runs
     - id: cost-preview
       name: Preview monthly cost
       action: debug:log
       input:
         message: |
           === OpenShift Virtualization — cost estimate ===
-          Prefix:       ${{ parameters.vmNamePrefix }}
-          Count:        ${{ parameters.vmCount }}
-          Size:         ${{ parameters.vmSize }}
-          Specs:        ${{ parameters.sizeSummary }}
-          OS:           ${{ parameters.operatingSystem }}
+          Names:        ${{ parameters.vmRole }}-${{ parameters.vmEnv }}-NN × ${{ parameters.vmCount }}
+          Size:         ${{ parameters.vmSize }} (${{ parameters.sizeSummary }})
           Namespace:    ${{ parameters.targetNamespace }}
-          Environment:  ${{ parameters.environment }}
-          Extra disk:   ${{ parameters.storageGi }} GiB / VM
-
-          Base rate/VM (XOF): ${{
-            parameters.vmSize === 'small' ? 45000 :
-            (parameters.vmSize === 'medium' ? 85000 :
-            (parameters.vmSize === 'large' ? 160000 : 300000))
+          Environment:  ${{ parameters.vmEnv }}
+          Unit (XOF):   ${{
+            parameters.vmSize === 'small' ? 25000 :
+            (parameters.vmSize === 'medium' ? 45000 : 85000)
           }}
-          Env multiplier: ${{
-            parameters.environment === 'production' ? 1.25 :
-            (parameters.environment === 'staging' ? 1.1 : 1.0)
-          }}
-          Disk charge/VM (XOF): ${{ parameters.storageGi * 150 }}
           Estimated TOTAL / month (XOF): ${{
             (
-              (
-                (parameters.vmSize === 'small' ? 45000 :
-                (parameters.vmSize === 'medium' ? 85000 :
-                (parameters.vmSize === 'large' ? 160000 : 300000)))
-                + (parameters.storageGi * 150)
-              )
+              (parameters.vmSize === 'small' ? 25000 :
+              (parameters.vmSize === 'medium' ? 45000 : 85000))
               * parameters.vmCount
-              * (parameters.environment === 'production' ? 1.25 :
-                (parameters.environment === 'staging' ? 1.1 : 1.0))
             )
           }}
           ================================================
 
     - id: launch-job
-      name: Deploy VMs on OpenShift Virtualization
+      name: Provision VMs on OpenShift Virtualization
       action: rhaap:launch-job-template
       input:
-        # AAP injects the OAuth token (Backstage Plugins ≥ 2.2.0).
-        # If you are on an older portal build that still requires a form token,
-        # replace with: token: ${{ parameters.token }} and add AAPTokenField.
         token: ${{ secrets.aapToken }}
         values:
-          template: OpenShift Virt / Deploy VMs
+          # Must match the AAP job template name exactly
+          template: Provision VMs
           inventory: ${{ parameters.inventory }}
           credentials: ${{ parameters.credentials }}
           extraVariables:
-            vm_name_prefix: ${{ parameters.vmNamePrefix }}
+            vm_role: ${{ parameters.vmRole }}
             vm_count: ${{ parameters.vmCount }}
             vm_size: ${{ parameters.vmSize }}
-            vm_vcpu: ${{
-              parameters.vmSize === 'small' ? 2 :
-              (parameters.vmSize === 'medium' ? 4 :
-              (parameters.vmSize === 'large' ? 8 : 16))
-            }}
-            vm_memory_gi: ${{
-              parameters.vmSize === 'small' ? 4 :
-              (parameters.vmSize === 'medium' ? 8 :
-              (parameters.vmSize === 'large' ? 16 : 32))
-            }}
-            vm_os_disk_gi: ${{
-              parameters.vmSize === 'small' ? 40 :
-              (parameters.vmSize === 'medium' ? 80 :
-              (parameters.vmSize === 'large' ? 160 : 320))
-            }}
-            vm_data_disk_gi: ${{ parameters.storageGi }}
-            operating_system: ${{ parameters.operatingSystem }}
+            vm_env: ${{ parameters.vmEnv }}
+            vm_start_id: ${{ parameters.vmStartId }}
             target_namespace: ${{ parameters.targetNamespace }}
-            environment: ${{ parameters.environment }}
             business_justification: ${{ parameters.businessJustification }}
             currency: XOF
             unit_price_xof: ${{
-              parameters.vmSize === 'small' ? 45000 :
-              (parameters.vmSize === 'medium' ? 85000 :
-              (parameters.vmSize === 'large' ? 160000 : 300000))
-            }}
-            disk_price_per_gi_xof: 150
-            env_multiplier: ${{
-              parameters.environment === 'production' ? 1.25 :
-              (parameters.environment === 'staging' ? 1.1 : 1.0)
+              parameters.vmSize === 'small' ? 25000 :
+              (parameters.vmSize === 'medium' ? 45000 : 85000)
             }}
             estimated_monthly_cost_xof: ${{
               (
-                (
-                  (parameters.vmSize === 'small' ? 45000 :
-                  (parameters.vmSize === 'medium' ? 85000 :
-                  (parameters.vmSize === 'large' ? 160000 : 300000)))
-                  + (parameters.storageGi * 150)
-                )
+                (parameters.vmSize === 'small' ? 25000 :
+                (parameters.vmSize === 'medium' ? 45000 : 85000))
                 * parameters.vmCount
-                * (parameters.environment === 'production' ? 1.25 :
-                  (parameters.environment === 'staging' ? 1.1 : 1.0))
               )
             }}
 
@@ -389,25 +297,19 @@ spec:
 
           ---
           **Request summary**
-          - VMs: ${{ parameters.vmCount }} × `${{ parameters.vmSize }}` (`${{ parameters.vmNamePrefix }}-*`)
+          - VMs: ${{ parameters.vmCount }} × `${{ parameters.vmSize }}` → `${{ parameters.vmRole }}-${{ parameters.vmEnv }}-*`
           - Namespace: `${{ parameters.targetNamespace }}`
-          - Environment: ${{ parameters.environment }}
           - Estimated monthly cost: **${{
               (
-                (
-                  (parameters.vmSize === 'small' ? 45000 :
-                  (parameters.vmSize === 'medium' ? 85000 :
-                  (parameters.vmSize === 'large' ? 160000 : 300000)))
-                  + (parameters.storageGi * 150)
-                )
+                (parameters.vmSize === 'small' ? 25000 :
+                (parameters.vmSize === 'medium' ? 45000 : 85000))
                 * parameters.vmCount
-                * (parameters.environment === 'production' ? 1.25 :
-                  (parameters.environment === 'staging' ? 1.1 : 1.0))
               )
             }} XOF**
 
-          Chargeback uses the estimate above; actual invoice may differ if
-          quotas, storage class, or add-ons change after deployment.
+          Open the cluster console to watch VMs come up in the **linuxvm** project.
     links:
       - title: OpenShift Virtualization docs
         url: https://docs.openshift.com/container-platform/latest/virt/about_virt/about-virt.html
+      - title: Demo playbook source (rhpds/ocp-virt)
+        url: https://github.com/rhpds/ocp-virt/blob/main/provision_vms.yml
