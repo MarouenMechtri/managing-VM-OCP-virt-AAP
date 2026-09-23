@@ -34,9 +34,9 @@ spec:
   owner: group:default/platform-team
   presentation:
     buttonLabels:
-      backButtonText: 'Back'
-      createButtonText: 'Deploy VMs'
-      reviewButtonText: 'Review & cost estimate'
+      backButtonText: Back
+      createButtonText: Deploy VMs
+      reviewButtonText: Review and cost estimate
 
   parameters:
     - title: VM configuration
@@ -57,18 +57,18 @@ spec:
           minLength: 2
           maxLength: 22
           errorMessage:
-            pattern: 'Use a DNS-safe lowercase prefix.'
+            pattern: Use a DNS-safe lowercase prefix.
 
         vmCount:
           title: Number of VMs
           type: integer
-          description: How many identical VMs to create (1–10 for the workshop cluster).
+          description: How many identical VMs to create (1-10 for the workshop cluster).
           default: 1
           minimum: 1
           maximum: 10
           errorMessage:
-            minimum: 'At least 1 VM is required.'
-            maximum: 'Maximum is 10 VMs per request.'
+            minimum: At least 1 VM is required.
+            maximum: Maximum is 10 VMs per request.
 
         vmSize:
           title: VM size
@@ -81,9 +81,9 @@ spec:
             - medium
             - large
           enumNames:
-            - Small — 1 vCPU / 2 GiB / 30 GiB (rhel9-server-small)
-            - Medium — 1 vCPU / 4 GiB / 30 GiB (rhel9-server-medium)
-            - Large — 2 vCPU / 8 GiB / 30 GiB (rhel9-server-large)
+            - Small - 1 vCPU / 2 GiB / 30 GiB (rhel9-server-small)
+            - Medium - 1 vCPU / 4 GiB / 30 GiB (rhel9-server-medium)
+            - Large - 2 vCPU / 8 GiB / 30 GiB (rhel9-server-large)
 
         vmEnv:
           title: Environment
@@ -106,7 +106,7 @@ spec:
           pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
           default: linuxvm
           errorMessage:
-            pattern: 'Enter a valid OpenShift namespace name.'
+            pattern: Enter a valid OpenShift namespace name.
 
         vmStartId:
           title: Starting VM id
@@ -131,19 +131,27 @@ spec:
           ui:field: AAPResourcePicker
           resource: credentials
 
+      # unitPriceXof is set per size so steps can multiply without YAML-breaking ternaries
       dependencies:
         vmSize:
           oneOf:
-            - properties:
+            - required:
+                - unitPriceXof
+              properties:
                 vmSize:
                   const: small
+                unitPriceXof:
+                  type: integer
+                  title: Unit price (XOF per VM per month)
+                  description: Catalog rate for small (1 vCPU / 2 GiB / 30 GiB).
+                  default: 25000
+                  const: 25000
+                  ui:widget: hidden
                 sizeSummary:
                   type: string
-                  title: Selected size — Small
-                  description: >-
-                    Specs: 1 vCPU · 2 GiB RAM · 30 GiB disk (rhel9-server-small).
-                    Base rate: 25 000 XOF / VM / month.
-                  default: '1 vCPU | 2 GiB | 30 GiB | 25 000 XOF/VM/mo'
+                  title: Selected size - Small
+                  description: Specs 1 vCPU, 2 GiB RAM, 30 GiB disk. Rate 25000 XOF per VM per month.
+                  default: 1 vCPU | 2 GiB | 30 GiB | 25000 XOF/VM/mo
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
@@ -151,36 +159,50 @@ spec:
                   ui:backstage:
                     review:
                       show: true
-            - properties:
+            - required:
+                - unitPriceXof
+              properties:
                 vmSize:
                   const: medium
+                unitPriceXof:
+                  type: integer
+                  title: Unit price (XOF per VM per month)
+                  description: Catalog rate for medium (1 vCPU / 4 GiB / 30 GiB).
+                  default: 45000
+                  const: 45000
+                  ui:widget: hidden
                 sizeSummary:
                   type: string
-                  title: Selected size — Medium
-                  description: >-
-                    Specs: 1 vCPU · 4 GiB RAM · 30 GiB disk (rhel9-server-medium).
-                    Base rate: 45 000 XOF / VM / month.
-                  default: '1 vCPU | 4 GiB | 30 GiB | 45 000 XOF/VM/mo'
+                  title: Selected size - Medium
+                  description: Specs 1 vCPU, 4 GiB RAM, 30 GiB disk. Rate 45000 XOF per VM per month.
+                  default: 1 vCPU | 4 GiB | 30 GiB | 45000 XOF/VM/mo
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
                     rows: 2
-            - properties:
+            - required:
+                - unitPriceXof
+              properties:
                 vmSize:
                   const: large
+                unitPriceXof:
+                  type: integer
+                  title: Unit price (XOF per VM per month)
+                  description: Catalog rate for large (2 vCPU / 8 GiB / 30 GiB).
+                  default: 85000
+                  const: 85000
+                  ui:widget: hidden
                 sizeSummary:
                   type: string
-                  title: Selected size — Large
-                  description: >-
-                    Specs: 2 vCPU · 8 GiB RAM · 30 GiB disk (rhel9-server-large).
-                    Base rate: 85 000 XOF / VM / month.
-                  default: '2 vCPU | 8 GiB | 30 GiB | 85 000 XOF/VM/mo'
+                  title: Selected size - Large
+                  description: Specs 2 vCPU, 8 GiB RAM, 30 GiB disk. Rate 85000 XOF per VM per month.
+                  default: 2 vCPU | 8 GiB | 30 GiB | 85000 XOF/VM/mo
                   ui:widget: textarea
                   ui:readonly: true
                   ui:options:
                     rows: 2
 
-    - title: Cost estimate & confirmation
+    - title: Cost estimate and confirmation
       required:
         - acceptCostEstimate
       properties:
@@ -188,9 +210,9 @@ spec:
           type: string
           title: How the estimate is calculated
           description: >-
-            Estimated monthly cost = unit rate for size × number of VMs.
-            Rates: small 25 000 · medium 45 000 · large 85 000 XOF per VM/month.
-          default: 'small 25 000 | medium 45 000 | large 85 000 XOF per VM/month'
+            Estimated monthly cost equals unit rate for size times number of VMs.
+            Rates small 25000, medium 45000, large 85000 XOF per VM per month.
+          default: small 25000 | medium 45000 | large 85000 XOF per VM/month
           ui:widget: textarea
           ui:readonly: true
           ui:options:
@@ -208,7 +230,7 @@ spec:
           default: false
           const: true
           errorMessage:
-            const: 'You must accept the cost estimate to continue.'
+            const: You must accept the cost estimate to continue.
 
         businessJustification:
           title: Business justification (optional)
@@ -223,9 +245,9 @@ spec:
           type: string
           title: Next step
           description: >-
-            Click Review & cost estimate, verify the monthly total, then Deploy VMs.
+            Click Review and cost estimate, verify the monthly total, then Deploy VMs.
             The job uses your AAP kube credential against OpenShift Virtualization.
-          default: 'ssh_public_key and vm_password must already be set on the Provision VMs job template.'
+          default: ssh_public_key and vm_password must already be set on the Provision VMs job template.
           ui:widget: textarea
           ui:readonly: true
           ui:options:
@@ -237,13 +259,13 @@ spec:
       action: debug:log
       input:
         message: |
-          === OpenShift Virtualization — cost estimate ===
-          Names:        ${{ parameters.vmRole }}-${{ parameters.vmEnv }}-NN × ${{ parameters.vmCount }}
+          === OpenShift Virtualization - cost estimate ===
+          Names:        ${{ parameters.vmRole }}-${{ parameters.vmEnv }}-NN x ${{ parameters.vmCount }}
           Size:         ${{ parameters.vmSize }} (${{ parameters.sizeSummary }})
           Namespace:    ${{ parameters.targetNamespace }}
           Environment:  ${{ parameters.vmEnv }}
-          Unit (XOF):   ${{ parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000) }}
-          Estimated TOTAL / month (XOF): ${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }}
+          Unit (XOF):   ${{ parameters.unitPriceXof }}
+          Estimated TOTAL / month (XOF): ${{ parameters.unitPriceXof * parameters.vmCount }}
           ================================================
 
     - id: launch-job
@@ -252,7 +274,6 @@ spec:
       input:
         token: ${{ secrets.aapToken }}
         values:
-          # Must match the AAP job template name exactly
           template: Provision VMs
           inventory: ${{ parameters.inventory }}
           credentials: ${{ parameters.credentials }}
@@ -265,9 +286,8 @@ spec:
             target_namespace: ${{ parameters.targetNamespace }}
             business_justification: ${{ parameters.businessJustification }}
             currency: XOF
-            # Quote expressions that contain ":" so YAML does not treat them as nested maps
-            unit_price_xof: "${{ parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000) }}"
-            estimated_monthly_cost_xof: "${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }}"
+            unit_price_xof: ${{ parameters.unitPriceXof }}
+            estimated_monthly_cost_xof: ${{ parameters.unitPriceXof * parameters.vmCount }}
 
   output:
     text:
@@ -280,9 +300,9 @@ spec:
 
           ---
           **Request summary**
-          - VMs: ${{ parameters.vmCount }} × `${{ parameters.vmSize }}` → `${{ parameters.vmRole }}-${{ parameters.vmEnv }}-*`
+          - VMs: ${{ parameters.vmCount }} x `${{ parameters.vmSize }}` -> `${{ parameters.vmRole }}-${{ parameters.vmEnv }}-*`
           - Namespace: `${{ parameters.targetNamespace }}`
-          - Estimated monthly cost: **${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }} XOF**
+          - Estimated monthly cost: **${{ parameters.unitPriceXof * parameters.vmCount }} XOF**
 
           Open the cluster console to watch VMs come up in the **linuxvm** project.
     links:
