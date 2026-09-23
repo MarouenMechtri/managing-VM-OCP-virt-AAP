@@ -242,17 +242,8 @@ spec:
           Size:         ${{ parameters.vmSize }} (${{ parameters.sizeSummary }})
           Namespace:    ${{ parameters.targetNamespace }}
           Environment:  ${{ parameters.vmEnv }}
-          Unit (XOF):   ${{
-            parameters.vmSize === 'small' ? 25000 :
-            (parameters.vmSize === 'medium' ? 45000 : 85000)
-          }}
-          Estimated TOTAL / month (XOF): ${{
-            (
-              (parameters.vmSize === 'small' ? 25000 :
-              (parameters.vmSize === 'medium' ? 45000 : 85000))
-              * parameters.vmCount
-            )
-          }}
+          Unit (XOF):   ${{ parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000) }}
+          Estimated TOTAL / month (XOF): ${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }}
           ================================================
 
     - id: launch-job
@@ -274,17 +265,9 @@ spec:
             target_namespace: ${{ parameters.targetNamespace }}
             business_justification: ${{ parameters.businessJustification }}
             currency: XOF
-            unit_price_xof: ${{
-              parameters.vmSize === 'small' ? 25000 :
-              (parameters.vmSize === 'medium' ? 45000 : 85000)
-            }}
-            estimated_monthly_cost_xof: ${{
-              (
-                (parameters.vmSize === 'small' ? 25000 :
-                (parameters.vmSize === 'medium' ? 45000 : 85000))
-                * parameters.vmCount
-              )
-            }}
+            # Quote expressions that contain ":" so YAML does not treat them as nested maps
+            unit_price_xof: "${{ parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000) }}"
+            estimated_monthly_cost_xof: "${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }}"
 
   output:
     text:
@@ -299,13 +282,7 @@ spec:
           **Request summary**
           - VMs: ${{ parameters.vmCount }} × `${{ parameters.vmSize }}` → `${{ parameters.vmRole }}-${{ parameters.vmEnv }}-*`
           - Namespace: `${{ parameters.targetNamespace }}`
-          - Estimated monthly cost: **${{
-              (
-                (parameters.vmSize === 'small' ? 25000 :
-                (parameters.vmSize === 'medium' ? 45000 : 85000))
-                * parameters.vmCount
-              )
-            }} XOF**
+          - Estimated monthly cost: **${{ (parameters.vmSize === 'small' ? 25000 : (parameters.vmSize === 'medium' ? 45000 : 85000)) * parameters.vmCount }} XOF**
 
           Open the cluster console to watch VMs come up in the **linuxvm** project.
     links:
