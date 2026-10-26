@@ -20,18 +20,18 @@
   gather_facts: false
 
   vars:
-    username: "{{ username | default('user1') }}"
-    target_namespace: "user-{{ username }}"
-    cost_api_url: "{{ cost_api_url | default('https://cost-onprem-gateway-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io/api/cost-management/v1') }}"
-    sso_token_url: "{{ sso_token_url | default('https://sso.apps.cluster-xwgs6.dyn.redhatworkshops.io/realms/kubernetes/protocol/openid-connect/token') }}"
-    cost_client_id: "{{ cost_client_id | default('cost-management-ui') }}"
-    cost_client_secret: "{{ cost_client_secret | default(lookup('env', 'COST_CLIENT_SECRET') | default('', true)) }}"
-    cost_username: "{{ cost_username | default(lookup('env', 'COST_USERNAME') | default(username, true)) }}"
-    cost_password: "{{ cost_password | default(lookup('env', 'COST_PASSWORD') | default('', true)) }}"
-    cost_access_token: "{{ cost_access_token | default(lookup('env', 'COST_ACCESS_TOKEN') | default('', true)) }}"
-    time_scope_units: "{{ time_scope_units | default('month') }}"
-    time_scope_value: "{{ time_scope_value | default(-1) | int }}"
-    resolution: "{{ resolution | default('monthly') }}"
+    # Plain defaults only — never "{{ var | default(...) }}" on the same name (recursion).
+    username: user1
+    cost_api_url: https://cost-onprem-gateway-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io/api/cost-management/v1
+    sso_token_url: https://sso.apps.cluster-xwgs6.dyn.redhatworkshops.io/realms/kubernetes/protocol/openid-connect/token
+    cost_client_id: cost-management-ui
+    cost_client_secret: ""
+    cost_username: ""
+    cost_password: ""
+    cost_access_token: ""
+    time_scope_units: month
+    time_scope_value: -1
+    resolution: monthly
     # Catalog used for estimate when API has no rows yet (same as provision_vm)
     size_catalog:
       S: 29.99
@@ -42,6 +42,16 @@
     validate_certs: false
 
   tasks:
+    - name: Normalize inputs
+      ansible.builtin.set_fact:
+        username: "{{ username | trim }}"
+        target_namespace: "user-{{ username | trim }}"
+        cost_username: "{{ cost_username | default(username, true) }}"
+        cost_client_secret: "{{ cost_client_secret | default(lookup('env', 'COST_CLIENT_SECRET'), true) | default('', true) }}"
+        cost_password: "{{ cost_password | default(lookup('env', 'COST_PASSWORD'), true) | default('', true) }}"
+        cost_access_token: "{{ cost_access_token | default(lookup('env', 'COST_ACCESS_TOKEN'), true) | default('', true) }}"
+        time_scope_value: "{{ time_scope_value | int }}"
+
     - name: Validate username
       ansible.builtin.assert:
         that:
@@ -49,7 +59,7 @@
         fail_msg: "username must be DNS-1123 (e.g. user1)"
 
     - name: Obtain Cost Management access token
-      when: cost_access_token | length == 0
+      when: (cost_access_token | default('') | length) == 0
       ansible.builtin.uri:
         url: "{{ sso_token_url }}"
         method: POST

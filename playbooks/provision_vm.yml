@@ -17,13 +17,13 @@
   gather_facts: false
 
   vars:
-    username: "{{ username | default('user1') }}"
-    target_namespace: "user-{{ username }}"
-    vm_name: "{{ vm_name | default('vm-' ~ (vm_size | default('S') | lower)) }}"
-    vm_size: "{{ vm_size | default('S') | upper }}"
-    vm_os: "{{ vm_os | default('fedora') }}"
-    create_ocp_user: "{{ create_ocp_user | default(true) | bool }}"
-    storage_class: "{{ storage_class | default('ocs-external-storagecluster-ceph-rbd') }}"
+    # Plain defaults only — never "{{ var | default(...) }}" on the same name (recursion).
+    # Survey / extra_vars override these.
+    username: user1
+    vm_size: S
+    vm_os: fedora
+    create_ocp_user: true
+    storage_class: ocs-external-storagecluster-ceph-rbd
     os_images_namespace: openshift-virtualization-os-images
     # Aligns with Cost Management model workshop-cloud-vm-rates (instance-type tag)
     size_catalog:
@@ -50,6 +50,17 @@
     storage_rate_per_gib: 0.10
 
   tasks:
+    - name: Normalize survey / extra vars
+      ansible.builtin.set_fact:
+        username: "{{ username | trim }}"
+        vm_size: "{{ vm_size | upper }}"
+        create_ocp_user: "{{ create_ocp_user | bool }}"
+
+    - name: Derive namespace and VM name
+      ansible.builtin.set_fact:
+        target_namespace: "user-{{ username }}"
+        vm_name: "{{ vm_name | default('vm-' ~ (vm_size | lower), true) }}"
+
     - name: Validate inputs
       ansible.builtin.assert:
         that:
@@ -63,7 +74,7 @@
     - name: Resolve size profile
       ansible.builtin.set_fact:
         size_profile: "{{ size_catalog[vm_size] }}"
-        disk_gi: "{{ storage_size_gi | default(size_catalog[vm_size].storage_gi) | int }}"
+        disk_gi: "{{ (storage_size_gi | default(size_catalog[vm_size].storage_gi)) | int }}"
 
     - name: Estimate monthly chargeback
       ansible.builtin.set_fact:
