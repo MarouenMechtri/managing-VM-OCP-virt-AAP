@@ -4,27 +4,11 @@
   "spec": [
     {
       "question_name": "OpenShift username",
-      "question_description": "Reports costs for project user-<username>",
+      "question_description": "Reports costs for project user-<username>. Auth uses the Workshop Cost Management credential (client_credentials).",
       "required": true,
       "type": "text",
       "variable": "username",
       "default": "user1"
-    },
-    {
-      "question_name": "Cost Management username",
-      "question_description": "SSO user for Cost Management API (often same as OpenShift demo user)",
-      "required": true,
-      "type": "text",
-      "variable": "cost_username",
-      "default": "user1"
-    },
-    {
-      "question_name": "Cost Management password",
-      "question_description": "SSO password (not stored in Git)",
-      "required": true,
-      "type": "password",
-      "variable": "cost_password",
-      "default": ""
     },
     {
       "question_name": "Time scope units",

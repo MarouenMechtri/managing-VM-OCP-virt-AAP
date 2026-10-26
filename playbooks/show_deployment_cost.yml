@@ -3,17 +3,12 @@
 #
 # Extra vars / survey:
 #   username                 - OpenShift user → project user-<username>
-# Optional overrides:
-#   cost_api_url             - Cost Management API base (…/api/cost-management/v1)
-#   sso_token_url            - Keycloak token endpoint
-#   cost_client_id           - OIDC client (default: cost-management-ui)
-#   cost_username / cost_password  - SSO user (or use COST_* env from credential)
-#   time_scope_units         - day | month (default: month)
-#   time_scope_value         - relative window, e.g. -1 (default)
-#   resolution               - daily | monthly
+# Auth (from AAP credential "Workshop Cost Management" injectors):
+#   sso_token_url, cost_client_id, cost_client_secret, cost_api_url
+# Uses OIDC client_credentials (metrics SA) — UI client has no password grant.
 #
-# Auth: password grant against Keycloak (workshop Cost Management UI client),
-# or set cost_access_token to skip token exchange.
+# Optional:
+#   time_scope_units, time_scope_value, resolution, cost_access_token
 - name: Show deployment cost from Cost Management
   hosts: localhost
   connection: local
@@ -24,21 +19,17 @@
     username: user1
     cost_api_url: https://cost-onprem-gateway-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io/api/cost-management/v1
     sso_token_url: https://sso.apps.cluster-xwgs6.dyn.redhatworkshops.io/realms/kubernetes/protocol/openid-connect/token
-    cost_client_id: cost-management-ui
+    cost_client_id: cost-management-metrics-operator
     cost_client_secret: ""
-    cost_username: ""
-    cost_password: ""
     cost_access_token: ""
     time_scope_units: month
     time_scope_value: -1
     resolution: monthly
-    # Catalog used for estimate when API has no rows yet (same as provision_vm)
     size_catalog:
       S: 29.99
       M: 59.99
       L: 119.99
       XL: 239.99
-    storage_rate_per_gib: 0.10
     validate_certs: false
 
   tasks:
@@ -46,10 +37,6 @@
       ansible.builtin.set_fact:
         username: "{{ username | trim }}"
         target_namespace: "user-{{ username | trim }}"
-        cost_username: "{{ cost_username | default(username, true) }}"
-        cost_client_secret: "{{ cost_client_secret | default(lookup('env', 'COST_CLIENT_SECRET'), true) | default('', true) }}"
-        cost_password: "{{ cost_password | default(lookup('env', 'COST_PASSWORD'), true) | default('', true) }}"
-        cost_access_token: "{{ cost_access_token | default(lookup('env', 'COST_ACCESS_TOKEN'), true) | default('', true) }}"
         time_scope_value: "{{ time_scope_value | int }}"
 
     - name: Validate username
@@ -58,7 +45,17 @@
           - username is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
         fail_msg: "username must be DNS-1123 (e.g. user1)"
 
-    - name: Obtain Cost Management access token
+    - name: Require Cost Management client credentials
+      when: (cost_access_token | default('') | length) == 0
+      ansible.builtin.assert:
+        that:
+          - cost_client_id | length > 0
+          - cost_client_secret | length > 0
+        fail_msg: >-
+          Missing cost_client_id / cost_client_secret. Attach the
+          "Workshop Cost Management" credential to this job template.
+
+    - name: Obtain Cost Management access token (client_credentials)
       when: (cost_access_token | default('') | length) == 0
       ansible.builtin.uri:
         url: "{{ sso_token_url }}"
@@ -66,19 +63,27 @@
         body_format: form-urlencoded
         validate_certs: "{{ validate_certs }}"
         body:
-          grant_type: password
+          grant_type: client_credentials
           client_id: "{{ cost_client_id }}"
           client_secret: "{{ cost_client_secret }}"
-          username: "{{ cost_username }}"
-          password: "{{ cost_password }}"
-          scope: openid
         status_code: [200]
       register: token_resp
       no_log: true
 
+    - name: Surface token error without secrets
+      when:
+        - (cost_access_token | default('') | length) == 0
+        - token_resp is failed or (token_resp.status | default(0) | int) != 200
+      ansible.builtin.fail:
+        msg: >-
+          SSO token request failed (HTTP {{ token_resp.status | default('n/a') }}).
+          Check credential client_id/secret and that the client allows
+          client_credentials grant. Detail: {{ token_resp.json.error | default(token_resp.msg | default('unknown')) }}
+            {{ token_resp.json.error_description | default('') }}
+
     - name: Set access token
       ansible.builtin.set_fact:
-        cm_token: "{{ cost_access_token if (cost_access_token | length > 0) else token_resp.json.access_token }}"
+        cm_token: "{{ cost_access_token if (cost_access_token | default('') | length > 0) else token_resp.json.access_token }}"
       no_log: true
 
     - name: List VMs in user namespace (for catalog estimate)
@@ -120,7 +125,6 @@
           Authorization: "Bearer {{ cm_token }}"
         status_code: [200]
       register: cost_report
-      no_log: true
 
     - name: Query Cost Management — project total
       ansible.builtin.uri:
@@ -131,7 +135,7 @@
           Authorization: "Bearer {{ cm_token }}"
         status_code: [200]
       register: cost_total
-      no_log: true
+
     - name: Extract totals from API
       ansible.builtin.set_fact:
         api_total: >-
