@@ -1,312 +1,155 @@
 ---
-# Self-Service Automation Portal (SSAP) custom template
-# Import: https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
+# Self-Service Automation Portal template
+# Import SCM: https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
 #
-# Aligns with the rhpds/ocp-virt Day-1 demo (RHEL9 on OpenShift Virtualization)
-# but adds count + size survey and a monthly cost preview.
-#
-# AAP prerequisites:
-#   1. Job template named exactly: Provision VMs
-#   2. Playbook: playbooks/provision_vms.yml (this repo) OR replace
-#      provision_vms.yml in your rhpds/ocp-virt project with that file
-#   3. Job template extra_vars / survey must supply ssh_public_key and vm_password
-#      (keep secrets in AAP credentials / survey, not in this Git repo)
-#   4. Credential: OpenShift / kubeconfig for your cluster
-#
+# Launches AAP job template: Provision VM on OCP Virtualization
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
   name: ocp-virt-vm-deploy-custom
-  title: Deploy VMs on OpenShift Virtualization
+  title: Deploy VM on OpenShift Virtualization
   description: >-
-    Provision RHEL 9 VMs on OpenShift Virtualization (linuxvm project).
-    Choose how many VMs and which size (small / medium / large), preview
-    the estimated monthly cost, then launch the AAP Provision VMs job.
+    Provision a VM in your user project (user-<username>). Creates the
+    namespace and admin binding if missing. Sizes S/M/L/XL map to Cost Management.
   namespace: default
   tags:
     - openshift
     - virtualization
     - provisioning
     - cost
-    - rhel
 spec:
   type: service
   owner: group:default/platform-team
   presentation:
     buttonLabels:
-      backButtonText: Back
-      createButtonText: Deploy VMs
-      reviewButtonText: Review and cost estimate
+      createButtonText: Provision VM
+      reviewButtonText: Review
 
   parameters:
-    - title: VM configuration
+    - title: VM request
       required:
-        - vmRole
-        - vmCount
+        - username
+        - vmName
         - vmSize
-        - vmEnv
-        - targetNamespace
       properties:
-        vmRole:
-          title: VM role / name prefix
+        username:
+          title: OpenShift username
           type: string
-          description: >-
-            Used in VM names as {role}-{env}-{id} (demo style), e.g. web-dev-01.
-          pattern: '^[a-z]([a-z0-9-]{0,20}[a-z0-9])?$'
-          default: web
-          minLength: 2
-          maxLength: 22
-          errorMessage:
-            pattern: Use a DNS-safe lowercase prefix.
+          description: Project user-<username> is created if it does not exist.
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          default: user1
 
-        vmCount:
-          title: Number of VMs
-          type: integer
-          description: How many identical VMs to create (1-10 for the workshop cluster).
-          default: 1
-          minimum: 1
-          maximum: 10
-          errorMessage:
-            minimum: At least 1 VM is required.
-            maximum: Maximum is 10 VMs per request.
+        vmName:
+          title: VM name
+          type: string
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          default: vm-demo
 
         vmSize:
-          title: VM size
+          title: Size (Cost Management instance-type)
           type: string
-          description: >-
-            Matches OpenShift RHEL9 server templates used by the ocp-virt demo.
-          default: small
-          enum:
-            - small
-            - medium
-            - large
+          default: S
+          enum: [S, M, L, XL]
           enumNames:
-            - Small - 1 vCPU / 2 GiB / 30 GiB (rhel9-server-small)
-            - Medium - 1 vCPU / 4 GiB / 30 GiB (rhel9-server-medium)
-            - Large - 2 vCPU / 8 GiB / 30 GiB (rhel9-server-large)
+            - S — u1.small — $29.99/mo
+            - M — u1.medium — $59.99/mo
+            - L — u1.large — $119.99/mo
+            - XL — u1.xlarge — $239.99/mo
 
-        vmEnv:
-          title: Environment
+        vmOs:
+          title: OS image (DataSource)
           type: string
-          description: Environment segment in the VM name and chargeback label.
-          default: dev
-          enum:
-            - dev
-            - staging
-            - prod
-          enumNames:
-            - Development
-            - Staging
-            - Production
-
-        targetNamespace:
-          title: OpenShift project / namespace
-          type: string
-          description: Namespace for VirtualMachine objects (demo default is linuxvm).
-          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
-          default: linuxvm
-          errorMessage:
-            pattern: Enter a valid OpenShift namespace name.
-
-        vmStartId:
-          title: Starting VM id
-          type: integer
-          description: First numeric suffix (web-dev-01 if start id = 1).
-          default: 1
-          minimum: 1
-          maximum: 99
+          default: fedora
+          enum: [fedora, rhel9, rhel10, centos-stream9]
 
         inventory:
-          title: Target inventory
-          description: AAP inventory that can reach the OpenShift API (often localhost + kube credential).
+          title: AAP inventory
           resource: inventories
           ui:field: AAPResourcePicker
 
         credentials:
-          title: Credentials
-          description: >-
-            OpenShift / kubeconfig credential for the cluster.
-            SSH public key and VM password should remain on the job template survey.
+          title: OpenShift credentials
           type: array
           ui:field: AAPResourcePicker
           resource: credentials
 
-      # unitPriceXof is set per size so steps can multiply without YAML-breaking ternaries
-      dependencies:
-        vmSize:
-          oneOf:
-            - required:
-                - unitPriceXof
-              properties:
-                vmSize:
-                  const: small
-                unitPriceXof:
-                  type: integer
-                  title: Unit price (XOF per VM per month)
-                  description: Catalog rate for small (1 vCPU / 2 GiB / 30 GiB).
-                  default: 25000
-                  const: 25000
-                  ui:widget: hidden
-                sizeSummary:
-                  type: string
-                  title: Selected size - Small
-                  description: Specs 1 vCPU, 2 GiB RAM, 30 GiB disk. Rate 25000 XOF per VM per month.
-                  default: 1 vCPU | 2 GiB | 30 GiB | 25000 XOF/VM/mo
-                  ui:widget: textarea
-                  ui:readonly: true
-                  ui:options:
-                    rows: 2
-                  ui:backstage:
-                    review:
-                      show: true
-            - required:
-                - unitPriceXof
-              properties:
-                vmSize:
-                  const: medium
-                unitPriceXof:
-                  type: integer
-                  title: Unit price (XOF per VM per month)
-                  description: Catalog rate for medium (1 vCPU / 4 GiB / 30 GiB).
-                  default: 45000
-                  const: 45000
-                  ui:widget: hidden
-                sizeSummary:
-                  type: string
-                  title: Selected size - Medium
-                  description: Specs 1 vCPU, 4 GiB RAM, 30 GiB disk. Rate 45000 XOF per VM per month.
-                  default: 1 vCPU | 4 GiB | 30 GiB | 45000 XOF/VM/mo
-                  ui:widget: textarea
-                  ui:readonly: true
-                  ui:options:
-                    rows: 2
-            - required:
-                - unitPriceXof
-              properties:
-                vmSize:
-                  const: large
-                unitPriceXof:
-                  type: integer
-                  title: Unit price (XOF per VM per month)
-                  description: Catalog rate for large (2 vCPU / 8 GiB / 30 GiB).
-                  default: 85000
-                  const: 85000
-                  ui:widget: hidden
-                sizeSummary:
-                  type: string
-                  title: Selected size - Large
-                  description: Specs 2 vCPU, 8 GiB RAM, 30 GiB disk. Rate 85000 XOF per VM per month.
-                  default: 2 vCPU | 8 GiB | 30 GiB | 85000 XOF/VM/mo
-                  ui:widget: textarea
-                  ui:readonly: true
-                  ui:options:
-                    rows: 2
-
-    - title: Cost estimate and confirmation
-      required:
-        - acceptCostEstimate
-      properties:
-        pricingGuide:
-          type: string
-          title: How the estimate is calculated
-          description: >-
-            Estimated monthly cost equals unit rate for size times number of VMs.
-            Rates small 25000, medium 45000, large 85000 XOF per VM per month.
-          default: small 25000 | medium 45000 | large 85000 XOF per VM/month
-          ui:widget: textarea
-          ui:readonly: true
-          ui:options:
-            rows: 2
-          ui:backstage:
-            review:
-              show: true
-
-        acceptCostEstimate:
-          title: I understand and accept the estimated monthly charge
-          type: boolean
-          description: >-
-            Confirm you reviewed the size rate and VM count.
-            The computed total appears on Review and in the job output.
-          default: false
-          const: true
-          errorMessage:
-            const: You must accept the cost estimate to continue.
-
-        businessJustification:
-          title: Business justification (optional)
-          type: string
-          description: Short note for chargeback / audit.
-          ui:options:
-            rows: 3
-
-    - title: Ready to deploy
-      properties:
-        finalNote:
-          type: string
-          title: Next step
-          description: >-
-            Click Review and cost estimate, verify the monthly total, then Deploy VMs.
-            The job uses your AAP kube credential against OpenShift Virtualization.
-          default: ssh_public_key and vm_password must already be set on the Provision VMs job template.
-          ui:widget: textarea
-          ui:readonly: true
-          ui:options:
-            rows: 2
-
   steps:
-    - id: cost-preview
-      name: Preview monthly cost
-      action: debug:log
-      input:
-        message: |
-          === OpenShift Virtualization - cost estimate ===
-          Names:        ${{ parameters.vmRole }}-${{ parameters.vmEnv }}-NN x ${{ parameters.vmCount }}
-          Size:         ${{ parameters.vmSize }} (${{ parameters.sizeSummary }})
-          Namespace:    ${{ parameters.targetNamespace }}
-          Environment:  ${{ parameters.vmEnv }}
-          Unit (XOF):   ${{ parameters.unitPriceXof }}
-          Estimated TOTAL / month (XOF): ${{ parameters.unitPriceXof * parameters.vmCount }}
-          ================================================
-
-    - id: launch-job
-      name: Provision VMs on OpenShift Virtualization
+    - id: launch
+      name: Launch Provision VM job
       action: rhaap:launch-job-template
       input:
-        token: ${{ secrets.aapToken }}
-        values:
-          template: Provision VMs
-          inventory: ${{ parameters.inventory }}
-          credentials: ${{ parameters.credentials }}
-          extraVariables:
-            vm_role: ${{ parameters.vmRole }}
-            vm_count: ${{ parameters.vmCount }}
-            vm_size: ${{ parameters.vmSize }}
-            vm_env: ${{ parameters.vmEnv }}
-            vm_start_id: ${{ parameters.vmStartId }}
-            target_namespace: ${{ parameters.targetNamespace }}
-            business_justification: ${{ parameters.businessJustification }}
-            currency: XOF
-            unit_price_xof: ${{ parameters.unitPriceXof }}
-            estimated_monthly_cost_xof: ${{ parameters.unitPriceXof * parameters.vmCount }}
+        template: Provision VM on OCP Virtualization
+        inventory: ${{ parameters.inventory }}
+        credentials: ${{ parameters.credentials }}
+        extraVars:
+          username: ${{ parameters.username }}
+          vm_name: ${{ parameters.vmName }}
+          vm_size: ${{ parameters.vmSize }}
+          vm_os: ${{ parameters.vmOs }}
 
   output:
-    text:
-      - title: VM deployment submitted
-        content: |
-          **Job ID:** ${{ steps['launch-job'].output.data.id }}
-          **Status:** ${{ steps['launch-job'].output.data.status }}
-
-          [View job in Ansible Automation Platform](${{ steps['launch-job'].output.data.url }})
-
-          ---
-          **Request summary**
-          - VMs: ${{ parameters.vmCount }} x `${{ parameters.vmSize }}` -> `${{ parameters.vmRole }}-${{ parameters.vmEnv }}-*`
-          - Namespace: `${{ parameters.targetNamespace }}`
-          - Estimated monthly cost: **${{ parameters.unitPriceXof * parameters.vmCount }} XOF**
-
-          Open the cluster console to watch VMs come up in the **linuxvm** project.
     links:
-      - title: OpenShift Virtualization docs
-        url: https://docs.openshift.com/container-platform/latest/virt/about_virt/about-virt.html
-      - title: Demo playbook source (rhpds/ocp-virt)
-        url: https://github.com/rhpds/ocp-virt/blob/main/provision_vms.yml
+      - title: AAP job
+        url: ${{ steps.launch.output.data.url }}
+---
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: ocp-virt-vm-cost-custom
+  title: Show VM deployment cost
+  description: >-
+    Query Cost Management for project user-<username> (instance-type chargeback).
+  namespace: default
+  tags:
+    - openshift
+    - cost
+    - virtualization
+spec:
+  type: service
+  owner: group:default/platform-team
+  parameters:
+    - title: Cost report
+      required:
+        - username
+        - costUsername
+        - costPassword
+      properties:
+        username:
+          title: OpenShift username
+          type: string
+          default: user1
+        costUsername:
+          title: Cost Management SSO username
+          type: string
+          default: user1
+        costPassword:
+          title: Cost Management SSO password
+          type: string
+          ui:widget: password
+        inventory:
+          title: AAP inventory
+          resource: inventories
+          ui:field: AAPResourcePicker
+        credentials:
+          title: OpenShift credentials
+          type: array
+          ui:field: AAPResourcePicker
+          resource: credentials
+
+  steps:
+    - id: launch
+      name: Launch cost report job
+      action: rhaap:launch-job-template
+      input:
+        template: Show VM deployment cost
+        inventory: ${{ parameters.inventory }}
+        credentials: ${{ parameters.credentials }}
+        extraVars:
+          username: ${{ parameters.username }}
+          cost_username: ${{ parameters.costUsername }}
+          cost_password: ${{ parameters.costPassword }}
+
+  output:
+    links:
+      - title: AAP job
+        url: ${{ steps.launch.output.data.url }}

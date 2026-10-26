@@ -1,0 +1,169 @@
+---
+# Report Cost Management charges for an OpenShift user's VM project.
+#
+# Extra vars / survey:
+#   username                 - OpenShift user → project user-<username>
+# Optional overrides:
+#   cost_api_url             - Cost Management API base (…/api/cost-management/v1)
+#   sso_token_url            - Keycloak token endpoint
+#   cost_client_id           - OIDC client (default: cost-management-ui)
+#   cost_username / cost_password  - SSO user (or use COST_* env from credential)
+#   time_scope_units         - day | month (default: month)
+#   time_scope_value         - relative window, e.g. -1 (default)
+#   resolution               - daily | monthly
+#
+# Auth: password grant against Keycloak (workshop Cost Management UI client),
+# or set cost_access_token to skip token exchange.
+- name: Show deployment cost from Cost Management
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    username: "{{ username | default('user1') }}"
+    target_namespace: "user-{{ username }}"
+    cost_api_url: "{{ cost_api_url | default('https://cost-onprem-gateway-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io/api/cost-management/v1') }}"
+    sso_token_url: "{{ sso_token_url | default('https://sso.apps.cluster-xwgs6.dyn.redhatworkshops.io/realms/kubernetes/protocol/openid-connect/token') }}"
+    cost_client_id: "{{ cost_client_id | default('cost-management-ui') }}"
+    cost_client_secret: "{{ cost_client_secret | default(lookup('env', 'COST_CLIENT_SECRET') | default('', true)) }}"
+    cost_username: "{{ cost_username | default(lookup('env', 'COST_USERNAME') | default(username, true)) }}"
+    cost_password: "{{ cost_password | default(lookup('env', 'COST_PASSWORD') | default('', true)) }}"
+    cost_access_token: "{{ cost_access_token | default(lookup('env', 'COST_ACCESS_TOKEN') | default('', true)) }}"
+    time_scope_units: "{{ time_scope_units | default('month') }}"
+    time_scope_value: "{{ time_scope_value | default(-1) | int }}"
+    resolution: "{{ resolution | default('monthly') }}"
+    # Catalog used for estimate when API has no rows yet (same as provision_vm)
+    size_catalog:
+      S: 29.99
+      M: 59.99
+      L: 119.99
+      XL: 239.99
+    storage_rate_per_gib: 0.10
+    validate_certs: false
+
+  tasks:
+    - name: Validate username
+      ansible.builtin.assert:
+        that:
+          - username is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+        fail_msg: "username must be DNS-1123 (e.g. user1)"
+
+    - name: Obtain Cost Management access token
+      when: cost_access_token | length == 0
+      ansible.builtin.uri:
+        url: "{{ sso_token_url }}"
+        method: POST
+        body_format: form-urlencoded
+        validate_certs: "{{ validate_certs }}"
+        body:
+          grant_type: password
+          client_id: "{{ cost_client_id }}"
+          client_secret: "{{ cost_client_secret }}"
+          username: "{{ cost_username }}"
+          password: "{{ cost_password }}"
+          scope: openid
+        status_code: [200]
+      register: token_resp
+      no_log: true
+
+    - name: Set access token
+      ansible.builtin.set_fact:
+        cm_token: "{{ cost_access_token if (cost_access_token | length > 0) else token_resp.json.access_token }}"
+      no_log: true
+
+    - name: List VMs in user namespace (for catalog estimate)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        namespace: "{{ target_namespace }}"
+      register: vms
+      failed_when: false
+
+    - name: Build catalog estimate from live VMs
+      ansible.builtin.set_fact:
+        catalog_rows: >-
+          {{
+            catalog_rows | default([]) + [{
+              'name': item.metadata.name,
+              'size': item.metadata.labels['instance-type'] | default('?'),
+              'vm_rate': size_catalog[item.metadata.labels['instance-type'] | default('')] | default(0),
+            }]
+          }}
+      loop: "{{ vms.resources | default([]) }}"
+      when: vms.resources is defined
+
+    - name: Sum catalog estimate
+      ansible.builtin.set_fact:
+        catalog_total_usd: >-
+          {{
+            (catalog_rows | default([]) | map(attribute='vm_rate') | map('float') | sum)
+            | round(2)
+          }}
+        vm_count: "{{ (vms.resources | default([])) | length }}"
+
+    - name: Query Cost Management — costs by project
+      ansible.builtin.uri:
+        url: "{{ cost_api_url }}/reports/openshift/costs/?filter[time_scope_units]={{ time_scope_units }}&filter[time_scope_value]={{ time_scope_value }}&filter[resolution]={{ resolution }}&filter[project]={{ target_namespace }}&group_by[tag:instance-type]=*"
+        method: GET
+        validate_certs: "{{ validate_certs }}"
+        headers:
+          Authorization: "Bearer {{ cm_token }}"
+        status_code: [200]
+      register: cost_report
+      no_log: true
+
+    - name: Query Cost Management — project total
+      ansible.builtin.uri:
+        url: "{{ cost_api_url }}/reports/openshift/costs/?filter[time_scope_units]={{ time_scope_units }}&filter[time_scope_value]={{ time_scope_value }}&filter[resolution]={{ resolution }}&filter[project]={{ target_namespace }}"
+        method: GET
+        validate_certs: "{{ validate_certs }}"
+        headers:
+          Authorization: "Bearer {{ cm_token }}"
+        status_code: [200]
+      register: cost_total
+      no_log: true
+    - name: Extract totals from API
+      ansible.builtin.set_fact:
+        api_total: >-
+          {{
+            cost_total.json.meta.total.cost.total.value
+            | default(cost_total.json.meta.total.infrastructure.total.value)
+            | default(0)
+          }}
+        api_currency: >-
+          {{
+            cost_total.json.meta.total.cost.total.units
+            | default(cost_total.json.meta.total.infrastructure.total.units)
+            | default('USD')
+          }}
+        api_data: "{{ cost_report.json.data | default([]) }}"
+
+    - name: Cost report
+      ansible.builtin.debug:
+        msg: |
+          Cost Management report
+          ----------------------
+          User / project:  {{ username }} / {{ target_namespace }}
+          Window:          {{ time_scope_units }}={{ time_scope_value }} ({{ resolution }})
+          VMs found:       {{ vm_count }}
+          {% for row in catalog_rows | default([]) %}
+          - {{ row.name }}  instance-type={{ row.size }}  catalog=${{ row.vm_rate }}/mo
+          {% else %}
+          - (no VirtualMachines in namespace)
+          {% endfor %}
+
+          Catalog estimate (monthly list rates): ${{ catalog_total_usd }} USD
+          Cost Management reported total:        {{ api_total }} {{ api_currency }}
+
+          UI: https://cost-onprem-ui-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io
+          Tip: tag-based rates need metric collection + cost model
+               workshop-cloud-vm-rates (instance-type = S|M|L|XL).
+
+    - name: Fail if namespace missing and no cost data
+      when:
+        - (vms.resources | default([]) | length) == 0
+        - (api_total | float) == 0
+      ansible.builtin.fail:
+        msg: >-
+          No VMs and no cost data for {{ target_namespace }}.
+          Run "Provision VM on OCP Virtualization" first with username={{ username }}.

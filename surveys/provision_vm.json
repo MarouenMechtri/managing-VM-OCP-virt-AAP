@@ -1,0 +1,40 @@
+{
+  "name": "",
+  "description": "Provision a VM on OpenShift Virtualization in the user's project",
+  "spec": [
+    {
+      "question_name": "OpenShift username",
+      "question_description": "Project will be user-<username>. Created if missing, with admin RoleBinding.",
+      "required": true,
+      "type": "text",
+      "variable": "username",
+      "default": "user1"
+    },
+    {
+      "question_name": "VM name",
+      "question_description": "DNS-1123 VirtualMachine name",
+      "required": true,
+      "type": "text",
+      "variable": "vm_name",
+      "default": "vm-demo"
+    },
+    {
+      "question_name": "VM size",
+      "question_description": "Maps to Cost Management instance-type tag and u1.* Instantype (S=$29.99, M=$59.99, L=$119.99, XL=$239.99 / month)",
+      "required": true,
+      "type": "multiplechoice",
+      "variable": "vm_size",
+      "choices": "S\nM\nL\nXL",
+      "default": "S"
+    },
+    {
+      "question_name": "OS DataSource",
+      "question_description": "Image from openshift-virtualization-os-images",
+      "required": true,
+      "type": "multiplechoice",
+      "variable": "vm_os",
+      "choices": "fedora\nrhel9\nrhel10\ncentos-stream9",
+      "default": "fedora"
+    }
+  ]
+}

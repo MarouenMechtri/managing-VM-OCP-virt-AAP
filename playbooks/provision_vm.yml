@@ -1,0 +1,244 @@
+---
+# Provision a VM on OpenShift Virtualization in the requester's project.
+#
+# Extra vars / survey:
+#   username          - OpenShift user (e.g. user1) → namespace user-<username>
+#   vm_name           - VirtualMachine name (DNS-1123)
+#   vm_size           - S | M | L | XL  (instance-type tag for Cost Management)
+# Optional:
+#   vm_os             - DataSource name (default: fedora)
+#   storage_size_gi   - root disk GiB (default from size catalog)
+#   create_ocp_user   - if true, ensure OpenShift User object exists (default: true)
+#
+# Requires: kubernetes.core collection + OpenShift/Kube credential on the job template.
+- name: Provision VM on OpenShift Virtualization
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    username: "{{ username | default('user1') }}"
+    target_namespace: "user-{{ username }}"
+    vm_name: "{{ vm_name | default('vm-' ~ (vm_size | default('S') | lower)) }}"
+    vm_size: "{{ vm_size | default('S') | upper }}"
+    vm_os: "{{ vm_os | default('fedora') }}"
+    create_ocp_user: "{{ create_ocp_user | default(true) | bool }}"
+    storage_class: "{{ storage_class | default('ocs-external-storagecluster-ceph-rbd') }}"
+    os_images_namespace: openshift-virtualization-os-images
+    # Aligns with Cost Management model workshop-cloud-vm-rates (instance-type tag)
+    size_catalog:
+      S:
+        instancetype: u1.small
+        preference: fedora
+        storage_gi: 32
+        monthly_usd: 29.99
+      M:
+        instancetype: u1.medium
+        preference: fedora
+        storage_gi: 48
+        monthly_usd: 59.99
+      L:
+        instancetype: u1.large
+        preference: fedora
+        storage_gi: 64
+        monthly_usd: 119.99
+      XL:
+        instancetype: u1.xlarge
+        preference: fedora
+        storage_gi: 96
+        monthly_usd: 239.99
+    storage_rate_per_gib: 0.10
+
+  tasks:
+    - name: Validate inputs
+      ansible.builtin.assert:
+        that:
+          - username is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+          - vm_name is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+          - vm_size in size_catalog
+        fail_msg: >-
+          username/vm_name must be DNS-1123; vm_size must be one of
+          {{ size_catalog.keys() | list }}
+
+    - name: Resolve size profile
+      ansible.builtin.set_fact:
+        size_profile: "{{ size_catalog[vm_size] }}"
+        disk_gi: "{{ storage_size_gi | default(size_catalog[vm_size].storage_gi) | int }}"
+
+    - name: Estimate monthly chargeback
+      ansible.builtin.set_fact:
+        estimated_monthly_usd: >-
+          {{
+            (
+              (size_profile.monthly_usd | float)
+              + ((disk_gi | int) * (storage_rate_per_gib | float))
+            ) | round(2)
+          }}
+
+    - name: Show provisioning plan
+      ansible.builtin.debug:
+        msg: |
+          Provision plan
+          --------------
+          User:       {{ username }}
+          Namespace:  {{ target_namespace }}
+          VM:         {{ vm_name }}
+          Size:       {{ vm_size }} ({{ size_profile.instancetype }})
+          Disk:       {{ disk_gi }} Gi ({{ storage_class }})
+          OS image:   {{ vm_os }}
+          Est. cost:  ${{ estimated_monthly_usd }} / month
+                      (VM ${{ size_profile.monthly_usd }} + storage)
+
+    - name: Ensure OpenShift User exists
+      when: create_ocp_user | bool
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: user.openshift.io/v1
+          kind: User
+          metadata:
+            name: "{{ username }}"
+          fullName: "{{ username }}"
+      register: ocp_user
+      failed_when: false
+
+    - name: Ensure user project namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ target_namespace }}"
+            labels:
+              rhai-tmm.dev/owner: "{{ username }}"
+              aap.provisioned: "true"
+            annotations:
+              openshift.io/display-name: "User {{ username }} Project"
+              openshift.io/description: "AAP-provisioned project for {{ username }}"
+              openshift.io/requester: "{{ username }}"
+
+    - name: Grant user admin on their namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: "{{ username }}-admin"
+            namespace: "{{ target_namespace }}"
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: admin
+          subjects:
+            - apiGroup: rbac.authorization.k8s.io
+              kind: User
+              name: "{{ username }}"
+
+    - name: Create VirtualMachine
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: "{{ vm_name }}"
+            namespace: "{{ target_namespace }}"
+            labels:
+              app: "{{ vm_name }}"
+              instance-type: "{{ vm_size }}"
+              cost-demo: "true"
+              owner: "{{ username }}"
+              aap.provisioned: "true"
+          spec:
+            runStrategy: Always
+            instancetype:
+              kind: VirtualMachineClusterInstancetype
+              name: "{{ size_profile.instancetype }}"
+            preference:
+              kind: VirtualMachineClusterPreference
+              name: "{{ size_profile.preference }}"
+            dataVolumeTemplates:
+              - metadata:
+                  name: "{{ vm_name }}-rootdisk"
+                  labels:
+                    instance-type: "{{ vm_size }}"
+                    owner: "{{ username }}"
+                spec:
+                  sourceRef:
+                    kind: DataSource
+                    name: "{{ vm_os }}"
+                    namespace: "{{ os_images_namespace }}"
+                  storage:
+                    storageClassName: "{{ storage_class }}"
+                    volumeMode: Block
+                    accessModes:
+                      - ReadWriteMany
+                    resources:
+                      requests:
+                        storage: "{{ disk_gi }}Gi"
+            template:
+              metadata:
+                labels:
+                  app: "{{ vm_name }}"
+                  instance-type: "{{ vm_size }}"
+                  cost-demo: "true"
+                  owner: "{{ username }}"
+                  kueue.x-k8s.io/managed: "false"
+              spec:
+                domain:
+                  devices:
+                    interfaces:
+                      - name: default
+                        masquerade: {}
+                networks:
+                  - name: default
+                    pod: {}
+                volumes:
+                  - name: rootdisk
+                    dataVolume:
+                      name: "{{ vm_name }}-rootdisk"
+                  - name: cloudinitdisk
+                    cloudInitNoCloud:
+                      userData: |
+                        #cloud-config
+                        hostname: {{ vm_name }}
+                        user: fedora
+                        chpasswd:
+                          expire: false
+                        ssh_pwauth: true
+                        password: fedora
+      register: vm_result
+
+    - name: Wait until VirtualMachine is ready (or Running)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ vm_name }}"
+        namespace: "{{ target_namespace }}"
+      register: vm_status
+      until: >-
+        vm_status.resources | length > 0 and (
+          (vm_status.resources[0].status.ready | default(false)) or
+          (vm_status.resources[0].status.printableStatus | default('') in ['Running', 'Starting'])
+        )
+      retries: 30
+      delay: 10
+      failed_when: false
+
+    - name: Provisioning summary
+      ansible.builtin.debug:
+        msg: |
+          VM provisioned
+          --------------
+          Namespace:  {{ target_namespace }}
+          Name:       {{ vm_name }}
+          Size tag:   instance-type={{ vm_size }}
+          Status:     {{
+            (vm_status.resources | default([{}]))[0].status.printableStatus
+            | default('submitted')
+          }}
+          Est. cost:  ${{ estimated_monthly_usd }} USD / month
+          Next:       run job template "Show VM deployment cost"
+                      with username={{ username }}

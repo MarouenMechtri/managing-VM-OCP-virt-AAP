@@ -1,74 +1,52 @@
-# Managing VMs on OpenShift Virtualization via AAP + SSAP
+# Managing VMs on OpenShift Virtualization via AAP
 
-Self-Service Automation Portal template that surveys **VM count** and **size** (small / medium / large), shows a **monthly cost estimate**, then launches the AAP **Provision VMs** job against OpenShift Virtualization.
+Playbooks and AAP job templates to:
 
-Built to fit the [rhpds/ocp-virt](https://github.com/rhpds/ocp-virt) Day-1 demo (`provision_vms.yml`, `linuxvm` namespace, RHEL9 DataSource).
+1. **Provision a VM** on OpenShift Virtualization in the requester's project (`user-<username>`), creating the namespace / OpenShift User / admin RoleBinding when missing.
+2. **Show deployment cost** from Cost Management for that project (tag `instance-type` = S/M/L/XL).
 
-**SSAP import URL:** https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
+**Repo:** https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
 
-## Size catalog (matches OCP RHEL9 server templates)
+## Size catalog (Cost Management)
 
-| Size   | Template              | vCPU | Memory | Disk  | Rate (XOF / VM / month) |
-|--------|-----------------------|------|--------|-------|-------------------------|
-| small  | rhel9-server-small    | 1    | 2 GiB  | 30 GiB | 25 000                 |
-| medium | rhel9-server-medium   | 1    | 4 GiB  | 30 GiB | 45 000                 |
-| large  | rhel9-server-large    | 2    | 8 GiB  | 30 GiB | 85 000                 |
+Aligned with cost model `workshop-cloud-vm-rates` (`vm_cost_per_month` + `instance-type` tag):
 
-**Estimate:** `unit rate × vm_count`
+| Size | Instantype | Disk (default) | Rate (USD / VM / month) |
+|------|------------|----------------|-------------------------|
+| S    | u1.small   | 32 Gi          | 29.99                   |
+| M    | u1.medium  | 48 Gi          | 59.99                   |
+| L    | u1.large   | 64 Gi          | 119.99                  |
+| XL   | u1.xlarge  | 96 Gi          | 239.99                  |
 
-## Files
+Storage: ~$0.10 / GiB-month (`storage_gb_request_per_month`).
 
-| Path | Role |
-|------|------|
-| `customtemplate/ocp_virt_vm_deploy.yml` | SSAP form (import this repo) |
-| `playbooks/provision_vms.yml` | Parameterized provisioner (drop-in for demo playbook) |
-| `requirements.yml` | `kubernetes.core` (+ related) collections |
+## Playbooks
 
-## Wire it to your demo
+| Playbook | Job template name | Purpose |
+|----------|-------------------|---------|
+| `playbooks/provision_vm.yml` | **Provision VM on OCP Virtualization** | Create ns + RBAC + VirtualMachine |
+| `playbooks/show_deployment_cost.yml` | **Show VM deployment cost** | Query Cost Management for `user-<username>` |
 
-The stock [rhpds/ocp-virt `provision_vms.yml`](https://github.com/rhpds/ocp-virt/blob/main/provision_vms.yml) hardcodes a fixed list of **small** VMs. To use count/size from SSAP:
+Survey JSON samples: `surveys/`.
 
-### Option A — Point the AAP project at this repo (simplest)
+## AAP wiring
 
-1. In AAP, edit the project that currently uses `https://github.com/rhpds/ocp-virt`  
-   → change SCM URL to `https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP` (or keep rhpds and use Option B).  
-2. Job template **Provision VMs** → playbook `playbooks/provision_vms.yml`.  
-3. Keep existing OpenShift kube credential on the job template.  
-4. Ensure survey / extra vars still provide `ssh_public_key` and `vm_password` (as in the demo).
+1. Project SCM → this repository (branch `main`).
+2. Credential **OpenShift or Kubernetes API Bearer Token** (cluster API + token) on both job templates.
+3. Inventory: localhost (or Demo Inventory with `ansible_connection=local`).
+4. Enable surveys from `surveys/*.json`.
+5. For cost job: Cost Management SSO user/password via survey (workshop Keycloak).
 
-### Option B — Keep rhpds/ocp-virt as the project
+## Namespace / user behaviour
 
-Copy `playbooks/provision_vms.yml` from this repo over `provision_vms.yml` in your fork of `rhpds/ocp-virt`, then sync the AAP project.
+- Namespace: `user-{{ username }}` (e.g. `user1` → `user-user1`).
+- If the namespace does not exist → create it.
+- If the OpenShift `User` object does not exist → create it.
+- RoleBinding `{{ username }}-admin` → `ClusterRole/admin` for that User.
+- VM labels include `instance-type: S|M|L|XL` for chargeback.
 
-### Option C — Job template name
+## Cost Management UI
 
-The SSAP template launches a job named exactly:
+https://cost-onprem-ui-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io
 
-```text
-Provision VMs
-```
-
-Rename your AAP job template to match, or edit `values.template` in `customtemplate/ocp_virt_vm_deploy.yml`.
-
-## Import into Self-Service Automation Portal
-
-1. Platform admin → **Templates** → **Add template**  
-2. SCM URL: `https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP`  
-3. **Analyze** → **Import** → set RBAC  
-
-Auth uses `${{ secrets.aapToken }}` (Backstage Plugins ≥ 2.2.0).
-
-## OpenShift cluster (workshop)
-
-Use your workshop console and the kube credential already configured in AAP. Do **not** store cluster admin passwords in Git or in the SSAP YAML.
-
-VMs are created in the `linuxvm` namespace by default (same as the demo).
-
-## Customize pricing
-
-Search for `25000`, `45000`, and `85000` in:
-
-- `customtemplate/ocp_virt_vm_deploy.yml` (form + Nunjucks)  
-- `playbooks/provision_vms.yml` (`size_catalog`)  
-
-Keep both files in sync.
+Filter by project `user-<username>` after metrics have been collected.
