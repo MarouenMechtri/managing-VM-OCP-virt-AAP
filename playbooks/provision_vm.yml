@@ -23,7 +23,9 @@
     vm_size: S
     vm_os: fedora
     create_ocp_user: true
-    storage_class: ocs-external-storagecluster-ceph-rbd
+    # Immediate binding avoids deadlock: WaitForFirstConsumer PVC waits for pod,
+    # while Kueue schedulingGates can block the virt-launcher from scheduling.
+    storage_class: ocs-external-storagecluster-ceph-rbd-immediate
     os_images_namespace: openshift-virtualization-os-images
     # Aligns with Cost Management model workshop-cloud-vm-rates (instance-type tag)
     size_catalog:
@@ -185,7 +187,7 @@
                     storageClassName: "{{ storage_class }}"
                     volumeMode: Block
                     accessModes:
-                      - ReadWriteMany
+                      - ReadWriteOnce
                     resources:
                       requests:
                         storage: "{{ disk_gi }}Gi"
@@ -196,6 +198,7 @@
                   instance-type: "{{ vm_size }}"
                   cost-demo: "true"
                   owner: "{{ username }}"
+                  # Prefer unreserved LQ; "false" alone is overwritten in managed NS.
                   kueue.x-k8s.io/managed: "false"
               spec:
                 domain:
@@ -222,6 +225,37 @@
                         password: fedora
       register: vm_result
 
+    - name: Find virt-launcher pods stuck on Kueue scheduling gates
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ target_namespace }}"
+        label_selectors:
+          - "vm.kubevirt.io/name={{ vm_name }}"
+          - "kubevirt.io=virt-launcher"
+      register: launcher_pods
+      retries: 12
+      delay: 5
+      until: launcher_pods.resources | length > 0
+      failed_when: false
+
+    - name: Clear Kueue schedulingGates if virt-launcher is gated
+      when:
+        - launcher_pods.resources | default([]) | length > 0
+        - (item.spec.schedulingGates | default([]) | length) > 0
+      kubernetes.core.k8s_json_patch:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ target_namespace }}"
+        name: "{{ item.metadata.name }}"
+        patch:
+          - op: remove
+            path: /spec/schedulingGates
+      loop: "{{ launcher_pods.resources | default([]) }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      failed_when: false
+
     - name: Wait until VirtualMachine is ready (or Running)
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
@@ -234,7 +268,7 @@
           (vm_status.resources[0].status.ready | default(false)) or
           (vm_status.resources[0].status.printableStatus | default('') in ['Running', 'Starting'])
         )
-      retries: 30
+      retries: 36
       delay: 10
       failed_when: false
 
