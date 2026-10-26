@@ -116,16 +116,6 @@
           }}
         vm_count: "{{ (vms.resources | default([])) | length }}"
 
-    - name: Query Cost Management — costs by project
-      ansible.builtin.uri:
-        url: "{{ cost_api_url }}/reports/openshift/costs/?filter[time_scope_units]={{ time_scope_units }}&filter[time_scope_value]={{ time_scope_value }}&filter[resolution]={{ resolution }}&filter[project]={{ target_namespace }}&group_by[tag:instance-type]=*"
-        method: GET
-        validate_certs: "{{ validate_certs }}"
-        headers:
-          Authorization: "Bearer {{ cm_token }}"
-        status_code: [200]
-      register: cost_report
-
     - name: Query Cost Management — project total
       ansible.builtin.uri:
         url: "{{ cost_api_url }}/reports/openshift/costs/?filter[time_scope_units]={{ time_scope_units }}&filter[time_scope_value]={{ time_scope_value }}&filter[resolution]={{ resolution }}&filter[project]={{ target_namespace }}"
@@ -135,6 +125,17 @@
           Authorization: "Bearer {{ cm_token }}"
         status_code: [200]
       register: cost_total
+
+    - name: Query Cost Management — group by project (optional detail)
+      ansible.builtin.uri:
+        url: "{{ cost_api_url }}/reports/openshift/costs/?filter[time_scope_units]={{ time_scope_units }}&filter[time_scope_value]={{ time_scope_value }}&filter[resolution]={{ resolution }}&filter[project]={{ target_namespace }}&group_by[project]=*"
+        method: GET
+        validate_certs: "{{ validate_certs }}"
+        headers:
+          Authorization: "Bearer {{ cm_token }}"
+        status_code: [200]
+      register: cost_report
+      failed_when: false
 
     - name: Extract totals from API
       ansible.builtin.set_fact:
