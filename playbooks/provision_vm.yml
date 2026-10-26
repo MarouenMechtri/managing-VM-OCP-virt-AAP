@@ -61,7 +61,8 @@
     - name: Derive namespace and VM name
       ansible.builtin.set_fact:
         target_namespace: "user-{{ username }}"
-        vm_name: "{{ vm_name | default('vm-' ~ (vm_size | lower), true) }}"
+        # KubeVirt / K8s names are DNS-1123 → force lowercase (vm-demo-M → vm-demo-m)
+        vm_name: "{{ (vm_name | default('vm-' ~ (vm_size | lower), true) | trim | lower) }}"
 
     - name: Validate inputs
       ansible.builtin.assert:
@@ -70,8 +71,8 @@
           - vm_name is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
           - vm_size in size_catalog
         fail_msg: >-
-          username/vm_name must be DNS-1123; vm_size must be one of
-          {{ size_catalog.keys() | list }}
+          username/vm_name must be DNS-1123 (lowercase); vm_size must be one of
+          {{ size_catalog.keys() | list }}. Got vm_name={{ vm_name }}, vm_size={{ vm_size }}.
 
     - name: Resolve size profile
       ansible.builtin.set_fact:

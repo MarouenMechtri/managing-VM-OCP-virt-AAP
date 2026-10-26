@@ -12,7 +12,7 @@
     },
     {
       "question_name": "VM name",
-      "question_description": "DNS-1123 VirtualMachine name",
+      "question_description": "DNS-1123 VirtualMachine name (lowercase only; e.g. vm-demo-m). Uppercase is auto-lowercased.",
       "required": true,
       "type": "text",
       "variable": "vm_name",
