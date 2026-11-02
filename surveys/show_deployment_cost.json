@@ -12,11 +12,21 @@
     },
     {
       "question_name": "Time scope units",
+      "question_description": "month uses value=-1 + monthly resolution; day uses -10/-30/-90 + daily resolution.",
       "required": true,
       "type": "multiplechoice",
       "variable": "time_scope_units",
       "choices": "day\nmonth",
       "default": "month"
+    },
+    {
+      "question_name": "Day lookback (only if units=day)",
+      "question_description": "Ignored when units=month. API only allows -10, -30, or -90 days.",
+      "required": false,
+      "type": "multiplechoice",
+      "variable": "time_scope_value",
+      "choices": "-10\n-30\n-90",
+      "default": "-10"
     }
   ]
 }

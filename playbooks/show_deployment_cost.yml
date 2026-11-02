@@ -23,6 +23,9 @@
     cost_client_secret: ""
     cost_access_token: ""
     time_scope_units: month
+    # Cost Management API constraints:
+    #   month → time_scope_value=-1, resolution=monthly
+    #   day   → time_scope_value in {-10,-30,-90}, resolution=daily
     time_scope_value: -1
     resolution: monthly
     size_catalog:
@@ -37,13 +40,34 @@
       ansible.builtin.set_fact:
         username: "{{ username | trim }}"
         target_namespace: "user-{{ username | trim }}"
-        time_scope_value: "{{ time_scope_value | int }}"
+        time_scope_units: "{{ time_scope_units | trim | lower }}"
+
+    - name: Align filters for Cost Management API
+      ansible.builtin.set_fact:
+        time_scope_value: >-
+          {{
+            (time_scope_value | int)
+            if (time_scope_units == 'day' and (time_scope_value | int) in [-10, -30, -90])
+            else (
+              -10 if time_scope_units == 'day' else -1
+            )
+          }}
+        resolution: "{{ 'daily' if time_scope_units == 'day' else 'monthly' }}"
 
     - name: Validate username
       ansible.builtin.assert:
         that:
           - username is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
         fail_msg: "username must be DNS-1123 (e.g. user1)"
+
+    - name: Validate day time_scope_value
+      when: time_scope_units == 'day'
+      ansible.builtin.assert:
+        that:
+          - (time_scope_value | int) in [-10, -30, -90]
+        fail_msg: >-
+          When time_scope_units=day, time_scope_value must be -10, -30, or -90
+          (got {{ time_scope_value }}).
 
     - name: Require Cost Management client credentials
       when: (cost_access_token | default('') | length) == 0
