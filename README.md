@@ -13,8 +13,8 @@ Aligned with cost model `workshop-cloud-vm-rates` (`vm_cost_per_month` + `instan
 
 | Size | Instantype (guest) | Memory | Disk (default) | Rate (USD / VM / month) |
 |------|--------------------|--------|----------------|-------------------------|
-| S    | u1.small           | 2 Gi   | 20 Gi          | 29.99                   |
-| M    | u1.medium          | 4 Gi   | 24 Gi          | 59.99                   |
+| S    | u1.small           | 2 Gi   | 32 Gi          | 29.99                   |
+| M    | u1.medium          | 4 Gi   | 40 Gi          | 59.99                   |
 | L    | u1.large           | 8 Gi   | 32 Gi          | 119.99                  |
 | XL   | u1.xlarge          | ≥8 Gi  | 40 Gi          | 239.99                  |
 
