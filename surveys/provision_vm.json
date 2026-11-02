@@ -20,7 +20,7 @@
     },
     {
       "question_name": "VM size",
-      "question_description": "Maps to Cost Management instance-type tag and u1.* Instantype (S=$29.99, M=$59.99, L=$119.99, XL=$239.99 / month)",
+      "question_description": "Cost tag S/M/L/XL (rates $29.99–$239.99/mo). Guests use light u1.nano→u1.medium to fit workshop CPU.",
       "required": true,
       "type": "multiplechoice",
       "variable": "vm_size",

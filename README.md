@@ -11,12 +11,12 @@ Playbooks and AAP job templates to:
 
 Aligned with cost model `workshop-cloud-vm-rates` (`vm_cost_per_month` + `instance-type` tag):
 
-| Size | Instantype | Disk (default) | Rate (USD / VM / month) |
-|------|------------|----------------|-------------------------|
-| S    | u1.small   | 32 Gi          | 29.99                   |
-| M    | u1.medium  | 48 Gi          | 59.99                   |
-| L    | u1.large   | 64 Gi          | 119.99                  |
-| XL   | u1.xlarge  | 96 Gi          | 239.99                  |
+| Size | Instantype (guest) | Disk (default) | Rate (USD / VM / month) |
+|------|--------------------|----------------|-------------------------|
+| S    | u1.nano            | 20 Gi          | 29.99                   |
+| M    | u1.micro           | 24 Gi          | 59.99                   |
+| L    | u1.small           | 32 Gi          | 119.99                  |
+| XL   | u1.medium          | 40 Gi          | 239.99                  |
 
 Storage: ~$0.10 / GiB-month (`storage_gb_request_per_month`).
 
