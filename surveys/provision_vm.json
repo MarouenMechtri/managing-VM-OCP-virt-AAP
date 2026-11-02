@@ -20,7 +20,7 @@
     },
     {
       "question_name": "VM size",
-      "question_description": "Cost tag S/M/L/XL (rates $29.99–$239.99/mo). Guests use light u1.nano→u1.medium to fit workshop CPU.",
+      "question_description": "Cost tag S/M/L/XL ($29.99–$239.99/mo). Guests u1.small→xlarge (≥2Gi for fedora preference).",
       "required": true,
       "type": "multiplechoice",
       "variable": "vm_size",

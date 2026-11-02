@@ -27,26 +27,26 @@
     # while Kueue schedulingGates can block the virt-launcher from scheduling.
     storage_class: ocs-external-storagecluster-ceph-rbd-immediate
     os_images_namespace: openshift-virtualization-os-images
-    # Cost tags stay S/M/L/XL; guest sizes use lighter u1.* flavors so workshop
-    # 3-node clusters (often CPU-saturated) can still schedule virt-launcher pods.
+    # Cost tags S/M/L/XL. Guest must be >= 2Gi to satisfy VirtualMachineClusterPreference
+    # "fedora" (rejects u1.nano/micro with 512Mi/1Gi).
     size_catalog:
       S:
-        instancetype: u1.nano
+        instancetype: u1.small
         preference: fedora
         storage_gi: 20
         monthly_usd: 29.99
       M:
-        instancetype: u1.micro
+        instancetype: u1.medium
         preference: fedora
         storage_gi: 24
         monthly_usd: 59.99
       L:
-        instancetype: u1.small
+        instancetype: u1.large
         preference: fedora
         storage_gi: 32
         monthly_usd: 119.99
       XL:
-        instancetype: u1.medium
+        instancetype: u1.xlarge
         preference: fedora
         storage_gi: 40
         monthly_usd: 239.99

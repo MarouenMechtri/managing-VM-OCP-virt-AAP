@@ -11,12 +11,14 @@ Playbooks and AAP job templates to:
 
 Aligned with cost model `workshop-cloud-vm-rates` (`vm_cost_per_month` + `instance-type` tag):
 
-| Size | Instantype (guest) | Disk (default) | Rate (USD / VM / month) |
-|------|--------------------|----------------|-------------------------|
-| S    | u1.nano            | 20 Gi          | 29.99                   |
-| M    | u1.micro           | 24 Gi          | 59.99                   |
-| L    | u1.small           | 32 Gi          | 119.99                  |
-| XL   | u1.medium          | 40 Gi          | 239.99                  |
+| Size | Instantype (guest) | Memory | Disk (default) | Rate (USD / VM / month) |
+|------|--------------------|--------|----------------|-------------------------|
+| S    | u1.small           | 2 Gi   | 20 Gi          | 29.99                   |
+| M    | u1.medium          | 4 Gi   | 24 Gi          | 59.99                   |
+| L    | u1.large           | 8 Gi   | 32 Gi          | 119.99                  |
+| XL   | u1.xlarge          | ≥8 Gi  | 40 Gi          | 239.99                  |
+
+> Preference `fedora` requires **≥ 2 Gi** RAM — do not use `u1.nano` / `u1.micro`.
 
 Storage: ~$0.10 / GiB-month (`storage_gb_request_per_month`).
 
