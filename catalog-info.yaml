@@ -1,0 +1,13 @@
+---
+# Backstage / Self-Service Automation Portal catalog registration
+# Import URL (raw):
+#   https://raw.githubusercontent.com/MarouenMechtri/managing-VM-OCP-virt-AAP/sandbox5308/catalog-info.yaml
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: sandbox5308-ocp-virt-templates
+  description: VM provision + cost templates for sandbox5308
+spec:
+  type: url
+  targets:
+    - ./customtemplate/ocp_virt_vm_deploy.yml

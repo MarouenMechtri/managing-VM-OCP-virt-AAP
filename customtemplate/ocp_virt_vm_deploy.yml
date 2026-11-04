@@ -1,22 +1,25 @@
 ---
-# Self-Service Automation Portal template
-# Import SCM: https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP
+# Self-Service Automation Portal templates for sandbox5308
+# Import in portal: Templates → Add → GitHub URL → this file (or catalog-info.yaml)
 #
-# Launches AAP job template: Provision VM on OCP Virtualization
+# AAP job templates (org sandbox5308):
+#   - Provision VM on OCP Virtualization (sandbox5308)
+#   - Show deployment cost (sandbox5308)
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: ocp-virt-vm-deploy-custom
-  title: Deploy VM on OpenShift Virtualization
+  name: ocp-virt-vm-deploy-sandbox5308
+  title: Deploy VM on OpenShift Virtualization (sandbox5308)
   description: >-
-    Provision a VM in your user project (user-<username>). Creates the
-    namespace and admin binding if missing. Sizes S/M/L/XL map to Cost Management.
+    Provision a VM in your user project (user-<username>) on sandbox5308.
+    Creates the namespace and admin binding if missing. Sizes S/M/L/XL map to Cost Management.
   namespace: default
   tags:
     - openshift
     - virtualization
     - provisioning
     - cost
+    - sandbox5308
 spec:
   type: service
   owner: group:default/platform-team
@@ -29,7 +32,6 @@ spec:
     - title: VM request
       required:
         - username
-        - vmName
         - vmSize
       properties:
         username:
@@ -40,10 +42,11 @@ spec:
           default: user1
 
         vmName:
-          title: VM name
+          title: VM name (optional)
           type: string
-          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
-          default: vm-demo
+          description: Leave empty to use vm-<size> (e.g. vm-s).
+          pattern: '^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          default: ""
 
         vmSize:
           title: Size (Cost Management instance-type)
@@ -72,13 +75,14 @@ spec:
           type: array
           ui:field: AAPResourcePicker
           resource: credentials
+          description: Select "sandbox5308 OpenShift"
 
   steps:
     - id: launch
       name: Launch Provision VM job
       action: rhaap:launch-job-template
       input:
-        template: Provision VM on OCP Virtualization
+        template: Provision VM on OCP Virtualization (sandbox5308)
         inventory: ${{ parameters.inventory }}
         credentials: ${{ parameters.credentials }}
         extraVars:
@@ -95,59 +99,66 @@ spec:
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: ocp-virt-vm-cost-custom
-  title: Show VM deployment cost
+  name: ocp-virt-vm-cost-sandbox5308
+  title: Show VM deployment cost (sandbox5308)
   description: >-
-    Query Cost Management for project user-<username> (instance-type chargeback).
+    Query Cost Management on sandbox5308 for project user-<username>
+    (instance-type chargeback S/M/L/XL).
   namespace: default
   tags:
     - openshift
     - cost
     - virtualization
+    - sandbox5308
 spec:
   type: service
   owner: group:default/platform-team
+  presentation:
+    buttonLabels:
+      createButtonText: Show cost
+      reviewButtonText: Review
+
   parameters:
     - title: Cost report
       required:
         - username
-        - costUsername
-        - costPassword
       properties:
         username:
           title: OpenShift username
           type: string
           default: user1
-        costUsername:
-          title: Cost Management SSO username
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+
+        timeScopeUnits:
+          title: Time scope
           type: string
-          default: user1
-        costPassword:
-          title: Cost Management SSO password
-          type: string
-          ui:widget: password
+          default: month
+          enum: [month, day]
+
         inventory:
           title: AAP inventory
           resource: inventories
           ui:field: AAPResourcePicker
+          description: Select "sandbox5308 localhost"
+
         credentials:
-          title: OpenShift credentials
+          title: Credentials
           type: array
           ui:field: AAPResourcePicker
           resource: credentials
+          description: Select "sandbox5308 OpenShift" and "sandbox5308 Cost Management"
 
   steps:
     - id: launch
       name: Launch cost report job
       action: rhaap:launch-job-template
       input:
-        template: Show VM deployment cost
+        template: Show deployment cost (sandbox5308)
         inventory: ${{ parameters.inventory }}
         credentials: ${{ parameters.credentials }}
         extraVars:
           username: ${{ parameters.username }}
-          cost_username: ${{ parameters.costUsername }}
-          cost_password: ${{ parameters.costPassword }}
+          time_scope_units: ${{ parameters.timeScopeUnits }}
 
   output:
     links:
