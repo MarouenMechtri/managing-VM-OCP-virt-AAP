@@ -4,7 +4,7 @@
 #   https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP/blob/sandbox5308/customtemplate/ocp_virt_vm_deploy.yml
 #
 # Action schema (AAP 2.7 / rhaap:launch-job-template):
-#   token: ${{ secrets.aapToken }}
+#   token: ${{ parameters.token }}
 #   values: { template, inventory, credentials, extraVariables, ... }
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
@@ -94,7 +94,7 @@ spec:
       name: Launch Provision VM job
       action: rhaap:launch-job-template
       input:
-        token: ${{ secrets.aapToken }}
+        token: ${{ parameters.token }}
         values:
           template: Provision VM on OCP Virtualization (sandbox5308)
           inventory: ${{ parameters.inventory }}
@@ -178,7 +178,7 @@ spec:
       name: Launch cost report job
       action: rhaap:launch-job-template
       input:
-        token: ${{ secrets.aapToken }}
+        token: ${{ parameters.token }}
         values:
           template: Show deployment cost (sandbox5308)
           inventory: ${{ parameters.inventory }}
