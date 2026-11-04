@@ -78,8 +78,6 @@ spec:
           resource: credentials
           description: Select "sandbox5308 OpenShift"
 
-    - title: Authentication
-      properties:
         token:
           title: AAP Authentication Token
           type: string
@@ -89,6 +87,7 @@ spec:
           ui:backstage:
             review:
               show: false
+
 
   steps:
     - id: launch
@@ -163,8 +162,6 @@ spec:
           resource: credentials
           description: Select "sandbox5308 OpenShift" and "sandbox5308 Cost Management"
 
-    - title: Authentication
-      properties:
         token:
           title: AAP Authentication Token
           type: string
@@ -174,6 +171,7 @@ spec:
           ui:backstage:
             review:
               show: false
+
 
   steps:
     - id: launch
