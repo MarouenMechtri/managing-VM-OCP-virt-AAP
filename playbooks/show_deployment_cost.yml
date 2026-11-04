@@ -194,7 +194,7 @@
           Catalog estimate (monthly list rates): ${{ catalog_total_usd }} USD
           Cost Management reported total:        {{ api_total }} {{ api_currency }}
 
-          UI: https://cost-onprem-ui-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io
+          UI: https://cost-onprem-ui-cost-onprem.apps.ocp.hkmvf.sandbox5308.opentlc.com
           Tip: tag-based rates need metric collection + cost model
                workshop-cloud-vm-rates (instance-type = S|M|L|XL).
 
