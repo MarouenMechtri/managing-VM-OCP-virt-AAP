@@ -78,6 +78,18 @@ spec:
           resource: credentials
           description: Select "sandbox5308 OpenShift"
 
+    - title: Authentication
+      properties:
+        token:
+          title: AAP Authentication Token
+          type: string
+          description: OAuth2 token (injected by the portal)
+          ui:field: AAPTokenField
+          ui:widget: hidden
+          ui:backstage:
+            review:
+              show: false
+
   steps:
     - id: launch
       name: Launch Provision VM job
@@ -150,6 +162,18 @@ spec:
           ui:field: AAPResourcePicker
           resource: credentials
           description: Select "sandbox5308 OpenShift" and "sandbox5308 Cost Management"
+
+    - title: Authentication
+      properties:
+        token:
+          title: AAP Authentication Token
+          type: string
+          description: OAuth2 token (injected by the portal)
+          ui:field: AAPTokenField
+          ui:widget: hidden
+          ui:backstage:
+            review:
+              show: false
 
   steps:
     - id: launch
