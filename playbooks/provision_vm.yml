@@ -65,10 +65,11 @@
         # Survey may send vm_name="" — treat blank as unset (do not self-ref in one expression)
         _vm_name_requested: "{{ vm_name | default('', true) | trim | lower }}"
 
-    - name: Default vm_name to vm-<size> when survey left it blank
+    - name: Resolve VM name (extra_vars vm_name="" cannot be overridden by set_fact)
       ansible.builtin.set_fact:
         # KubeVirt / K8s names are DNS-1123 → lowercase only
-        vm_name: >-
+        # Use a NEW fact name: survey/extra_vars win over set_fact for `vm_name`.
+        vm_name_eff: >-
           {{
             _vm_name_requested
             if (_vm_name_requested | length) > 0
@@ -79,11 +80,11 @@
       ansible.builtin.assert:
         that:
           - username is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
-          - vm_name is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+          - vm_name_eff is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
           - vm_size in size_catalog
         fail_msg: >-
           username/vm_name must be DNS-1123 (lowercase); vm_size must be one of
-          {{ size_catalog.keys() | list }}. Got vm_name={{ vm_name }}, vm_size={{ vm_size }}.
+          {{ size_catalog.keys() | list }}. Got vm_name={{ vm_name_eff }}, vm_size={{ vm_size }}.
 
     - name: Resolve size profile
       ansible.builtin.set_fact:
@@ -107,7 +108,7 @@
           --------------
           User:       {{ username }}
           Namespace:  {{ target_namespace }}
-          VM:         {{ vm_name }}
+          VM:         {{ vm_name_eff }}
           Size:       {{ vm_size }} ({{ size_profile.instancetype }})
           Disk:       {{ disk_gi }} Gi ({{ storage_class }})
           OS image:   {{ vm_os }}
@@ -168,10 +169,10 @@
           apiVersion: kubevirt.io/v1
           kind: VirtualMachine
           metadata:
-            name: "{{ vm_name }}"
+            name: "{{ vm_name_eff }}"
             namespace: "{{ target_namespace }}"
             labels:
-              app: "{{ vm_name }}"
+              app: "{{ vm_name_eff }}"
               instance-type: "{{ vm_size }}"
               cost-demo: "true"
               owner: "{{ username }}"
@@ -186,7 +187,7 @@
               name: "{{ size_profile.preference }}"
             dataVolumeTemplates:
               - metadata:
-                  name: "{{ vm_name }}-rootdisk"
+                  name: "{{ vm_name_eff }}-rootdisk"
                   labels:
                     instance-type: "{{ vm_size }}"
                     owner: "{{ username }}"
@@ -206,7 +207,7 @@
             template:
               metadata:
                 labels:
-                  app: "{{ vm_name }}"
+                  app: "{{ vm_name_eff }}"
                   instance-type: "{{ vm_size }}"
                   cost-demo: "true"
                   owner: "{{ username }}"
@@ -224,12 +225,12 @@
                 volumes:
                   - name: rootdisk
                     dataVolume:
-                      name: "{{ vm_name }}-rootdisk"
+                      name: "{{ vm_name_eff }}-rootdisk"
                   - name: cloudinitdisk
                     cloudInitNoCloud:
                       userData: |
                         #cloud-config
-                        hostname: {{ vm_name }}
+                        hostname: {{ vm_name_eff }}
                         user: fedora
                         chpasswd:
                           expire: false
@@ -243,7 +244,7 @@
         kind: Pod
         namespace: "{{ target_namespace }}"
         label_selectors:
-          - "vm.kubevirt.io/name={{ vm_name }}"
+          - "vm.kubevirt.io/name={{ vm_name_eff }}"
           - "kubevirt.io=virt-launcher"
       register: launcher_pods
       retries: 12
@@ -272,7 +273,7 @@
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
         kind: VirtualMachine
-        name: "{{ vm_name }}"
+        name: "{{ vm_name_eff }}"
         namespace: "{{ target_namespace }}"
       register: vm_status
       until: >-
@@ -290,7 +291,7 @@
           VM provisioned
           --------------
           Namespace:  {{ target_namespace }}
-          Name:       {{ vm_name }}
+          Name:       {{ vm_name_eff }}
           Size tag:   instance-type={{ vm_size }}
           Status:     {{
             (vm_status.resources | default([{}]))[0].status.printableStatus
