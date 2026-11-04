@@ -1,10 +1,11 @@
 ---
 # Self-Service Automation Portal templates for sandbox5308
-# Import in portal: Templates → Add → GitHub URL → this file (or catalog-info.yaml)
+# Import URL:
+#   https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP/blob/sandbox5308/customtemplate/ocp_virt_vm_deploy.yml
 #
-# AAP job templates (org sandbox5308):
-#   - Provision VM on OCP Virtualization (sandbox5308)
-#   - Show deployment cost (sandbox5308)
+# Action schema (AAP 2.7 / rhaap:launch-job-template):
+#   token: ${{ secrets.aapToken }}
+#   values: { template, inventory, credentials, extraVariables, ... }
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
@@ -45,7 +46,6 @@ spec:
           title: VM name (optional)
           type: string
           description: Leave empty to use vm-<size> (e.g. vm-s).
-          pattern: '^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
           default: ""
 
         vmSize:
@@ -69,6 +69,7 @@ spec:
           title: AAP inventory
           resource: inventories
           ui:field: AAPResourcePicker
+          description: Select "sandbox5308 localhost"
 
         credentials:
           title: OpenShift credentials
@@ -82,14 +83,16 @@ spec:
       name: Launch Provision VM job
       action: rhaap:launch-job-template
       input:
-        template: Provision VM on OCP Virtualization (sandbox5308)
-        inventory: ${{ parameters.inventory }}
-        credentials: ${{ parameters.credentials }}
-        extraVars:
-          username: ${{ parameters.username }}
-          vm_name: ${{ parameters.vmName }}
-          vm_size: ${{ parameters.vmSize }}
-          vm_os: ${{ parameters.vmOs }}
+        token: ${{ secrets.aapToken }}
+        values:
+          template: Provision VM on OCP Virtualization (sandbox5308)
+          inventory: ${{ parameters.inventory }}
+          credentials: ${{ parameters.credentials }}
+          extraVariables:
+            username: ${{ parameters.username }}
+            vm_name: ${{ parameters.vmName }}
+            vm_size: ${{ parameters.vmSize }}
+            vm_os: ${{ parameters.vmOs }}
 
   output:
     links:
@@ -153,12 +156,14 @@ spec:
       name: Launch cost report job
       action: rhaap:launch-job-template
       input:
-        template: Show deployment cost (sandbox5308)
-        inventory: ${{ parameters.inventory }}
-        credentials: ${{ parameters.credentials }}
-        extraVars:
-          username: ${{ parameters.username }}
-          time_scope_units: ${{ parameters.timeScopeUnits }}
+        token: ${{ secrets.aapToken }}
+        values:
+          template: Show deployment cost (sandbox5308)
+          inventory: ${{ parameters.inventory }}
+          credentials: ${{ parameters.credentials }}
+          extraVariables:
+            username: ${{ parameters.username }}
+            time_scope_units: ${{ parameters.timeScopeUnits }}
 
   output:
     links:
