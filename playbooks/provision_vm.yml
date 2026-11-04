@@ -62,8 +62,18 @@
     - name: Derive namespace and VM name
       ansible.builtin.set_fact:
         target_namespace: "user-{{ username }}"
-        # KubeVirt / K8s names are DNS-1123 → force lowercase (vm-demo-M → vm-demo-m)
-        vm_name: "{{ (vm_name | default('vm-' ~ (vm_size | lower), true) | trim | lower) }}"
+        # Survey may send vm_name="" — treat blank as unset (do not self-ref in one expression)
+        _vm_name_requested: "{{ vm_name | default('', true) | trim | lower }}"
+
+    - name: Default vm_name to vm-<size> when survey left it blank
+      ansible.builtin.set_fact:
+        # KubeVirt / K8s names are DNS-1123 → lowercase only
+        vm_name: >-
+          {{
+            _vm_name_requested
+            if (_vm_name_requested | length) > 0
+            else ('vm-' ~ (vm_size | lower))
+          }}
 
     - name: Validate inputs
       ansible.builtin.assert:
