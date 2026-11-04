@@ -25,7 +25,7 @@
     create_ocp_user: true
     # Immediate binding avoids deadlock: WaitForFirstConsumer PVC waits for pod,
     # while Kueue schedulingGates can block the virt-launcher from scheduling.
-    storage_class: ocs-external-storagecluster-ceph-rbd-immediate
+    storage_class: gp3-csi-immediate
     os_images_namespace: openshift-virtualization-os-images
     # Cost tags S/M/L/XL. Guest must be >= 2Gi to satisfy VirtualMachineClusterPreference
     # "fedora" (rejects u1.nano/micro with 512Mi/1Gi).

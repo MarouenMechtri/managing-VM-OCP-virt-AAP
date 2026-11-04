@@ -17,9 +17,9 @@
   vars:
     # Plain defaults only — never "{{ var | default(...) }}" on the same name (recursion).
     username: user1
-    cost_api_url: https://cost-onprem-gateway-cost-onprem.apps.cluster-xwgs6.dyn.redhatworkshops.io/api/cost-management/v1
-    sso_token_url: https://sso.apps.cluster-xwgs6.dyn.redhatworkshops.io/realms/kubernetes/protocol/openid-connect/token
-    cost_client_id: cost-management-metrics-operator
+    cost_api_url: https://cost-onprem-gateway-cost-onprem.apps.ocp.hkmvf.sandbox5308.opentlc.com/api/cost-management/v1
+    sso_token_url: https://sso.apps.ocp.hkmvf.sandbox5308.opentlc.com/realms/kubernetes/protocol/openid-connect/token
+    cost_client_id: cost-management-operator
     cost_client_secret: ""
     cost_access_token: ""
     time_scope_units: month
