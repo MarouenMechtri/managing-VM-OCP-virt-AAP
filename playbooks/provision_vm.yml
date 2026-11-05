@@ -101,19 +101,20 @@
             ) | round(2)
           }}
 
+    # Line list — portal shows multiline debug strings as literal "\n".
     - name: Show provisioning plan
       ansible.builtin.debug:
-        msg: |
-          Provision plan
-          --------------
-          User:       {{ username }}
-          Namespace:  {{ target_namespace }}
-          VM:         {{ vm_name_eff }}
-          Size:       {{ vm_size }} ({{ size_profile.instancetype }})
-          Disk:       {{ disk_gi }} Gi ({{ storage_class }})
-          OS image:   {{ vm_os }}
-          Est. cost:  ${{ estimated_monthly_usd }} / month
-                      (VM ${{ size_profile.monthly_usd }} + storage)
+        msg:
+          - "Provision plan"
+          - "--------------"
+          - "User:       {{ username }}"
+          - "Namespace:  {{ target_namespace }}"
+          - "VM:         {{ vm_name_eff }}"
+          - "Size:       {{ vm_size }} ({{ size_profile.instancetype }})"
+          - "Disk:       {{ disk_gi }} Gi ({{ storage_class }})"
+          - "OS image:   {{ vm_os }}"
+          - "Est. cost:  ${{ estimated_monthly_usd }} / month"
+          - "            (VM ${{ size_profile.monthly_usd }} + storage)"
 
     - name: Ensure OpenShift User exists
       when: create_ocp_user | bool
@@ -287,16 +288,13 @@
 
     - name: Provisioning summary
       ansible.builtin.debug:
-        msg: |
-          VM provisioned
-          --------------
-          Namespace:  {{ target_namespace }}
-          Name:       {{ vm_name_eff }}
-          Size tag:   instance-type={{ vm_size }}
-          Status:     {{
-            (vm_status.resources | default([{}]))[0].status.printableStatus
-            | default('submitted')
-          }}
-          Est. cost:  ${{ estimated_monthly_usd }} USD / month
-          Next:       run job template "Show VM deployment cost"
-                      with username={{ username }}
+        msg:
+          - "VM provisioned"
+          - "--------------"
+          - "Namespace:  {{ target_namespace }}"
+          - "Name:       {{ vm_name_eff }}"
+          - "Size tag:   instance-type={{ vm_size }}"
+          - "Status:     {{ (vm_status.resources | default([{}]))[0].status.printableStatus | default('submitted') }}"
+          - "Est. cost:  ${{ estimated_monthly_usd }} USD / month"
+          - "Next:       run job template \"Show VM deployment cost\""
+          - "            with username={{ username }}"
