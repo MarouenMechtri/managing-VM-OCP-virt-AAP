@@ -3,9 +3,10 @@
 # Import URL:
 #   https://github.com/MarouenMechtri/managing-VM-OCP-virt-AAP/blob/sandbox5308/customtemplate/ocp_virt_vm_deploy.yml
 #
-# Action schema (AAP 2.7 / rhaap:launch-job-template):
+# Inventory and credentials are fixed on the AAP job templates — not prompted here.
+# Action schema (this portal build):
 #   token: ${{ parameters.token }}
-#   values: { template, inventory, credentials, extraVariables, ... }
+#   values: { template, extraVariables, ... }
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
@@ -65,19 +66,6 @@ spec:
           default: fedora
           enum: [fedora, rhel9, rhel10, centos-stream9]
 
-        inventory:
-          title: AAP inventory
-          resource: inventories
-          ui:field: AAPResourcePicker
-          description: Select "sandbox5308 localhost"
-
-        credentials:
-          title: OpenShift credentials
-          type: array
-          ui:field: AAPResourcePicker
-          resource: credentials
-          description: Select "sandbox5308 OpenShift"
-
         token:
           title: AAP Authentication Token
           type: string
@@ -88,7 +76,6 @@ spec:
             review:
               show: false
 
-
   steps:
     - id: launch
       name: Launch Provision VM job
@@ -97,8 +84,6 @@ spec:
         token: ${{ parameters.token }}
         values:
           template: Provision VM on OCP Virtualization (sandbox5308)
-          inventory: ${{ parameters.inventory }}
-          credentials: ${{ parameters.credentials }}
           extraVariables:
             username: ${{ parameters.username }}
             vm_name: ${{ parameters.vmName }}
@@ -149,19 +134,6 @@ spec:
           default: month
           enum: [month, day]
 
-        inventory:
-          title: AAP inventory
-          resource: inventories
-          ui:field: AAPResourcePicker
-          description: Select "sandbox5308 localhost"
-
-        credentials:
-          title: Credentials
-          type: array
-          ui:field: AAPResourcePicker
-          resource: credentials
-          description: Select "sandbox5308 OpenShift" and "sandbox5308 Cost Management"
-
         token:
           title: AAP Authentication Token
           type: string
@@ -172,7 +144,6 @@ spec:
             review:
               show: false
 
-
   steps:
     - id: launch
       name: Launch cost report job
@@ -181,8 +152,6 @@ spec:
         token: ${{ parameters.token }}
         values:
           template: Show deployment cost (sandbox5308)
-          inventory: ${{ parameters.inventory }}
-          credentials: ${{ parameters.credentials }}
           extraVariables:
             username: ${{ parameters.username }}
             time_scope_units: ${{ parameters.timeScopeUnits }}
